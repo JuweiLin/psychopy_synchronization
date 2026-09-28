@@ -1,5 +1,8 @@
 from psychopy import visual, core
 import pylink
+import threading
+import time
+
 from EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
 
 
@@ -10,10 +13,15 @@ from EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
 EYELINK_IP = "100.1.1.1"
 
 SCREEN_INDEX = 0
+
 SCREEN_WIDTH = 1920
 SCREEN_HEIGHT = 1080
 
 REFRESH_RATE = 60.0
+
+# Delay before automatically sending "C" to EyeLink Host.
+# Gives doTrackerSetup() enough time to enter setup mode.
+AUTO_CAL_DELAY = 2.0
 
 
 # ============================================================
@@ -46,50 +54,54 @@ win = visual.Window(
 w, h = win.size
 
 print("Window created.")
-print("Window size:", w, h)
+print("Actual PsychoPy window size:", w, h)
 
 
 # ============================================================
-# 3. Force / bypass frame-rate measurement
+# 3. Bypass PsychoPy frame-rate measurement
 # ============================================================
 
-print(f"Forcing frame rate to {REFRESH_RATE} Hz")
+print(f"Forcing refresh rate to {REFRESH_RATE} Hz")
 
-# Prevent PsychoPy / EyeLink graphics from trying to measure
-# the real frame rate and hanging on dual-screen systems.
 win.getActualFrameRate = lambda *args, **kwargs: REFRESH_RATE
-
-# Some PsychoPy code may inspect this value directly
 win.monitorFramePeriod = 1.0 / REFRESH_RATE
 
 
 # ============================================================
-# 4. PsychoPy display test
+# 4. Quick display test
 # ============================================================
 
-print("Displaying white test dot for 5 seconds...")
+# Small donut-style target, just to verify PsychoPy can draw.
 
-test_dot = visual.Circle(
+outer = visual.Circle(
     win=win,
-    radius=30,
+    radius=12,
     pos=(0, 0),
     fillColor="white",
     lineColor="white"
 )
 
-test_dot.draw()
+inner = visual.Circle(
+    win=win,
+    radius=4,
+    pos=(0, 0),
+    fillColor="black",
+    lineColor="black"
+)
+
+outer.draw()
+inner.draw()
+
 win.flip()
 
-core.wait(5)
+print("Showing PsychoPy test target for 2 seconds...")
+core.wait(2)
 
-# Clear display
 win.flip()
-
-print("Display test finished.")
 
 
 # ============================================================
-# 5. Configure EyeLink display coordinates
+# 5. Tell EyeLink about display coordinates
 # ============================================================
 
 el.sendCommand(
@@ -100,12 +112,28 @@ el.sendMessage(
     f"DISPLAY_COORDS 0 0 {w - 1} {h - 1}"
 )
 
-# 9-point calibration
+
+# ============================================================
+# 6. Calibration configuration
+# ============================================================
+
+# Nine-point calibration
 el.sendCommand("calibration_type = HV9")
+
+# Automatically accept fixation and advance between calibration points
+el.sendCommand("enable_automatic_calibration = YES")
+
+# Minimum delay before accepting each point.
+# 1000 ms is SR Research's typical suggested starting point.
+el.sendCommand("automatic_calibration_pacing = 1000")
+
+print("Calibration type: HV9")
+print("Automatic calibration: enabled")
+print("Automatic pacing: 1000 ms")
 
 
 # ============================================================
-# 6. EyeLink PsychoPy graphics
+# 7. Setup EyeLink PsychoPy graphics
 # ============================================================
 
 print("Creating EyeLink PsychoPy graphics...")
@@ -115,60 +143,91 @@ genv = EyeLinkCoreGraphicsPsychoPy(
     win
 )
 
-# Calibration target/background colors
+# Don't manually force giant circle target.
+# Leave EyeLinkCoreGraphicsPsychoPy target appearance at defaults.
+
 genv.setCalibrationColors(
-    (1, 1, 1),      # white target
+    (1, 1, 1),      # white foreground
     (-1, -1, -1)    # black background
 )
 
-# Calibration target shape
-genv.setTargetType("circle")
-genv.setTargetSize(24)
-
-# Register PsychoPy graphics with pylink
 pylink.openGraphicsEx(genv)
 
 print("EyeLink graphics initialized.")
 
 
 # ============================================================
-# 7. Prepare tracker
+# 8. Function to automatically press C on the EyeLink Host
+# ============================================================
+
+def start_calibration_automatically():
+    time.sleep(AUTO_CAL_DELAY)
+
+    print("Sending C to EyeLink Host...")
+
+    # ASCII code for lowercase 'c' = 99
+    el.sendKeybutton(
+        ord("c"),
+        0,
+        pylink.KB_PRESS
+    )
+
+    # Send release as well
+    time.sleep(0.05)
+
+    try:
+        el.sendKeybutton(
+            ord("c"),
+            0,
+            pylink.KB_RELEASE
+        )
+    except Exception:
+        # Some versions do not require/handle release separately.
+        pass
+
+
+# ============================================================
+# 9. Enter setup and automatically start calibration
 # ============================================================
 
 el.setOfflineMode()
 
 print("")
-print("========================================")
-print("EyeLink connected")
-print("PsychoPy display initialized")
-print(f"Frame rate forced to {REFRESH_RATE} Hz")
-print("Starting calibration directly...")
-print("========================================")
+print("==========================================")
+print("Entering EyeLink setup...")
+print("Calibration will start automatically.")
+print("You should NOT need to press C.")
+print("==========================================")
 print("")
 
+# Start timer/thread BEFORE doTrackerSetup(),
+# because doTrackerSetup() blocks until setup is completed.
+auto_cal_thread = threading.Thread(
+    target=start_calibration_automatically,
+    daemon=True
+)
 
-# ============================================================
-# 8. Start calibration directly
-# ============================================================
+auto_cal_thread.start()
 
-# 1 = enter calibration directly
-# instead of stopping at Camera Setup first
-
-el.doTrackerSetup(1)
-
-
-# ============================================================
-# 9. Calibration finished
-# ============================================================
-
-print("Calibration/setup returned successfully.")
+# This opens EyeLink setup and handles calibration graphics.
+el.doTrackerSetup()
 
 
 # ============================================================
-# 10. Cleanup
+# 10. Setup/calibration finished
+# ============================================================
+
+print("")
+print("EyeLink setup returned.")
+print("Calibration finished or setup was exited.")
+
+
+# ============================================================
+# 11. Cleanup
 # ============================================================
 
 el.setOfflineMode()
+
 el.close()
 
 win.close()
