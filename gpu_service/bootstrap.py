@@ -11,6 +11,29 @@ import sys
 from .launcher import PROJECT_ROOT, main as launch, server_arguments
 
 
+# NPP releases shipped with CUDA 12.8, 12.6 and 11.8 respectively.
+# PyTorch already supplies the matching CUDA runtime and NVRTC packages.
+NPP_REQUIREMENTS = {
+    "cu128": "nvidia-npp-cu12==12.3.3.65",
+    "cu126": "nvidia-npp-cu12==12.3.1.23",
+    "cu118": "nvidia-npp-cu11==11.8.0.86",
+}
+
+
+def runtime_environment(python, device):
+    """Expose this managed Python 3.11 environment's NVIDIA shared libraries."""
+    environment = os.environ.copy()
+    if device.startswith("cuda"):
+        site_packages = Path(python).parent.parent / "lib" / "python3.11" / "site-packages"
+        libraries = [str(path) for path in sorted((site_packages / "nvidia").glob("*/lib"))
+                     if path.is_dir()]
+        existing = [path for path in environment.get("LD_LIBRARY_PATH", "").split(os.pathsep) if path]
+        paths = list(dict.fromkeys(libraries + existing))
+        if paths:
+            environment["LD_LIBRARY_PATH"] = os.pathsep.join(paths)
+    return environment
+
+
 def torch_backend(driver_versions):
     """Use published PyTorch 2.7.1 builds and conservative NVIDIA driver floors."""
     versions = []
@@ -91,10 +114,19 @@ def prepare_environment(uv, device, root=PROJECT_ROOT):
         print(f"Creating GPU environment: {environment}", flush=True)
         subprocess.run([uv, "venv", "--no-config", "--python", "3.11", str(environment)], check=True)
     print("Checking and installing GPU requirements...", flush=True)
+    # Exact local versions also replace an existing CPU/different CUDA build.
+    wheels = [f"torch==2.7.1+{backend}", f"torchaudio==2.7.1+{backend}"]
+    if backend == "cpu":
+        wheels.append("torchcodec===0.5")  # CPU TorchCodec has no +cpu suffix.
+    else:
+        wheels.extend([f"torchcodec==0.5+{backend}", NPP_REQUIREMENTS[backend]])
     subprocess.run([uv, "pip", "install", "--no-config", "--python", str(python),
-                    "--torch-backend", backend, "--requirements", str(Path(root) / "gpu_service" / "requirements.txt")],
+                    "--torch-backend", backend, "--requirements", str(Path(root) / "gpu_service" / "requirements.txt"),
+                    *wheels],
                    check=True)
-    subprocess.run([str(python), "-c", GPU_PROBE, device], check=True)
+    # LD_LIBRARY_PATH must be set before the child starts, including the probe.
+    subprocess.run([str(python), "-c", GPU_PROBE, device], check=True,
+                   env=runtime_environment(python, device))
     return python
 
 
@@ -121,7 +153,8 @@ def main(argv=None):
         parser.error(str(exc))
     # An explicit interpreter is equivalent to activation and cannot select a
     # PsychoPy/Conda Python accidentally. exec also preserves Ctrl+C/shutdown.
-    os.execv(str(python), [str(python), str(PROJECT_ROOT / "start_gpu_server.py"), "--config", args.config])
+    os.execve(str(python), [str(python), str(PROJECT_ROOT / "start_gpu_server.py"), "--config", args.config],
+              runtime_environment(python, device))
 
 
 if __name__ == "__main__":

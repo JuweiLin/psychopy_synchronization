@@ -55,7 +55,64 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(install[install.index("--python") + 1], str(python))
         self.assertEqual(install[install.index("--torch-backend") + 1], "cu128")
         self.assertEqual(install[install.index("--requirements") + 1], str(self.root / "gpu_service" / "requirements.txt"))
+        self.assertIn("torchcodec==0.5+cu128", install)
+        self.assertIn("nvidia-npp-cu12==12.3.3.65", install)
         self.assertEqual(calls[-1], [str(python), "-c", bootstrap.GPU_PROBE, "cuda:0"])
+
+    def test_matching_cuda_wheels_and_npp_or_explicit_cpu_are_installed(self):
+        for driver, device, backend, npp in (
+            ("580.95.05", "cuda", "cu128", "nvidia-npp-cu12==12.3.3.65"),
+            ("565.57.01", "cuda", "cu126", "nvidia-npp-cu12==12.3.1.23"),
+            ("550.54.14", "cuda", "cu118", "nvidia-npp-cu11==11.8.0.86"),
+            ("", "cpu", "cpu", None),
+        ):
+            with self.subTest(backend=backend):
+                calls = []
+
+                def runner(command, **kwargs):
+                    calls.append(command)
+                    return subprocess.CompletedProcess(command, 0, stdout=driver)
+
+                with patch.object(bootstrap.shutil, "which", return_value="/usr/bin/tool"), \
+                     patch.object(bootstrap, "ensure_ffmpeg"), \
+                     patch.object(bootstrap.subprocess, "run", side_effect=runner):
+                    bootstrap.prepare_environment("uv", device, self.root)
+                install = next(command for command in calls if "install" in command)
+                self.assertIn(f"torch==2.7.1+{backend}", install)
+                self.assertIn(f"torchaudio==2.7.1+{backend}", install)
+                if npp:
+                    self.assertIn(npp, install)
+                    self.assertIn(f"torchcodec==0.5+{backend}", install)
+                else:
+                    self.assertIn("torchcodec===0.5", install)
+                    self.assertFalse(any("nvidia" in arg for arg in install))
+                    self.assertFalse(any("nvidia-smi" in command for command in calls))
+
+    def test_probe_receives_nvidia_library_paths_and_preserves_environment(self):
+        python = self.root / ".venv-gpu" / "bin" / "python"
+        python.parent.mkdir(parents=True)
+        python.touch()
+        nvidia = python.parent.parent / "lib" / "python3.11" / "site-packages" / "nvidia"
+        libraries = [nvidia / name / "lib" for name in ("cuda_nvrtc", "npp")]
+        for path in libraries:
+            path.mkdir(parents=True)
+        # Unrelated files must not be placed on the loader search path.
+        (nvidia / "unused").mkdir()
+        (nvidia / "unused" / "lib").touch()
+        probes = []
+
+        def runner(command, **kwargs):
+            if bootstrap.GPU_PROBE in command:
+                probes.append(kwargs["env"])
+            return subprocess.CompletedProcess(command, 0, stdout="580.95.05")
+
+        with patch.dict(bootstrap.os.environ, {"LD_LIBRARY_PATH": "/existing/lib::", "GPU_TEST": "keep"}):
+            self.run_setup(runner)
+            self.assertEqual(probes[0]["LD_LIBRARY_PATH"].split(":"),
+                             [str(path) for path in libraries] + ["/existing/lib"])
+            self.assertEqual(probes[0]["GPU_TEST"], "keep")
+            self.assertEqual(bootstrap.os.environ["LD_LIBRARY_PATH"], "/existing/lib::")
+            self.assertEqual(bootstrap.runtime_environment(python, "cpu"), dict(bootstrap.os.environ))
 
     def test_existing_environment_is_reused_but_dependencies_and_cuda_are_checked(self):
         python = self.root / ".venv-gpu" / "bin" / "python"
@@ -144,7 +201,7 @@ class BootstrapTests(unittest.TestCase):
     def test_failed_gpu_probe_prevents_launch(self):
         with patch.object(bootstrap, "server_arguments", return_value=["--device", "cuda"]), \
              patch.object(bootstrap, "prepare_environment", side_effect=subprocess.CalledProcessError(1, ["python", "-c", "probe"])), \
-             patch.object(bootstrap.os, "execv") as execute, redirect_stderr(io.StringIO()):
+             patch.object(bootstrap.os, "execve") as execute, redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 bootstrap.main(["--uv", "uv"])
         execute.assert_not_called()
@@ -152,12 +209,16 @@ class BootstrapTests(unittest.TestCase):
     def test_success_launches_service_with_managed_python_and_config(self):
         python = self.root / ".venv-gpu" / "bin" / "python"
         config = str(self.root / "gpu config.py")
+        npp = python.parent.parent / "lib" / "python3.11" / "site-packages" / "nvidia" / "npp" / "lib"
+        npp.mkdir(parents=True)
         with patch.object(bootstrap, "server_arguments", return_value=["--device", "cuda"]), \
              patch.object(bootstrap, "prepare_environment", return_value=python), \
-             patch.object(bootstrap.os, "execv") as execute:
+             patch.object(bootstrap.os, "execve") as execute:
             bootstrap.main(["--uv", "uv", "--config", config])
         self.assertEqual(execute.call_args.args[0], str(python))
         self.assertEqual(execute.call_args.args[1][-2:], ["--config", config])
+        self.assertEqual(execute.call_args.args[2], bootstrap.runtime_environment(python, "cuda"))
+        self.assertEqual(execute.call_args.args[2]["LD_LIBRARY_PATH"].split(":")[0], str(npp))
 
     @unittest.skipUnless(shutil.which("sh"), "Requires a POSIX shell")
     def test_shell_uses_uv_from_a_different_directory_and_preserves_arguments(self):
