@@ -7,6 +7,7 @@ The current implementation ends after Condition 1 reading-speed measurement and 
 | `Start Experiment.bat`, `Start Experiment.command` | Double-click entries for Windows and macOS; open the login without typed commands |
 | `launch_experiment.py` | Calls runtime discovery |
 | `psychopy_sync/launcher_bootstrap.py` | Finds the PsychoPy/wx environment, including common Windows and macOS standalone installations |
+| `psychopy_sync/windows_python_picker.ps1` | Windows fallback file chooser and saved interpreter path |
 | `psychopy_sync/launcher.py` | English participant ID form, mode-aware dependency checks, experiment launch and results |
 | `psychopy_sync/desktop_runner.py` | Runs the experiment in a separate process and returns its outcome to the form |
 | `config.py` | Five editable settings: dummy mode, condition counts, tracker IP and GPU URL |

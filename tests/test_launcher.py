@@ -12,7 +12,7 @@ from psychopy_sync.config import ExperimentConfig
 from psychopy_sync.desktop_runner import execute
 from psychopy_sync.event_log import validate_participant_id
 from psychopy_sync.launcher import experiment_command, result_message
-from psychopy_sync.launcher_bootstrap import Runtime, find_runtime, required_modules, windows_python_candidates
+from psychopy_sync.launcher_bootstrap import Runtime, find_runtime, main, required_modules, windows_python_candidates
 
 
 class LauncherTests(unittest.TestCase):
@@ -110,6 +110,22 @@ class LauncherTests(unittest.TestCase):
         with patch("psychopy_sync.launcher_bootstrap.subprocess.run", return_value=
                    subprocess.CompletedProcess([], 0, json.dumps({"psychopy": True, "wx": False}))):
             self.assertIsNone(find_runtime([Runtime(Path("/python"), {})]))
+
+    def test_windows_launch_preserves_program_files_path_and_child_exit_code(self):
+        runtime = Runtime(Path("C:/Program Files/PsychoPy/pythonw.exe"), {"runtime": "standalone"})
+        with patch("psychopy_sync.launcher_bootstrap.sys.platform", "win32"), \
+             patch("psychopy_sync.launcher_bootstrap.find_runtime", return_value=runtime), \
+             patch("psychopy_sync.launcher_bootstrap.os.execve") as execve, \
+             patch("psychopy_sync.launcher_bootstrap.subprocess.run", return_value=
+                   subprocess.CompletedProcess([], 7)) as run:
+            with self.assertRaises(SystemExit) as outcome:
+                main()
+        self.assertEqual(outcome.exception.code, 7)
+        self.assertEqual(run.call_args.args[0],
+                         [str(runtime.executable), "-m", "psychopy_sync.launcher"])
+        self.assertEqual(run.call_args.kwargs["env"], runtime.environment)
+        self.assertEqual(run.call_args.kwargs["cwd"], Path(__file__).resolve().parent.parent)
+        execve.assert_not_called()
 
     def test_windows_discovery_handles_spaces_per_user_installs_and_missing_roots(self):
         system = self.root / "Program Files"

@@ -11,7 +11,7 @@ Double-click the entry for the experiment computer:
 
 Keep the whole project folder together when copying it to another computer. Enter a participant ID such as `S001`, then click **Start Experiment**. No name or password is collected. No terminal commands need to be typed; a terminal/console window opens only to launch the application.
 
-The launcher looks for a project `.venv` / `venv` and an installed PsychoPy application. Dummy mode requires only PsychoPy and wxPython. Real recording also requires SR Research PyLink (`pylink`) and `EyeLinkCoreGraphicsPsychoPy`. Missing components are shown before the experiment starts. Windows discovery checks common PsychoPy installation folders under Program Files and Local AppData/Programs. For a custom installation, a maintainer can set `PSYCHOPY_PYTHON` to its Python executable. The Windows entry has not been tested on a Windows computer yet.
+The launcher looks for a project `.venv` / `venv` and an installed PsychoPy application. Dummy mode requires only PsychoPy and wxPython. Real recording also requires SR Research PyLink (`pylink`) and `EyeLinkCoreGraphicsPsychoPy`. Missing components are shown before the experiment starts. Windows discovery checks common PsychoPy installation folders under Program Files and Local AppData/Programs. If automatic launch fails, a file chooser lets you select `python.exe` inside the PsychoPy installation folder. This choice is saved under `data/launcher_logs/windows-python.txt` for future launches. If PsychoPy is not installed, install PsychoPy Standalone first. Opening the `.py` file directly depends on Windows file associations; use the `.bat` entry. The Windows chooser has not been tested on a Windows computer yet.
 
 ## Configure
 

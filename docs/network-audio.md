@@ -21,6 +21,14 @@ python -m gpu_service.tts_server \
 
 Replace the reference paths. Set `tts_server_url` in the display computer's root `config.py` to the GPU computer's actual origin, for example `"http://192.168.1.20:8765"`, and reopen the launcher. The server defaults to loopback unless `--host` is set. This HTTP service is intended for the experiment LAN and has no account authentication.
 
+Run from the project root in the GPU computer's F5-TTS Python environment. The equivalent single-line command works in Windows PowerShell/CMD and Linux/macOS shells (replace both reference paths):
+
+```sh
+python -m gpu_service.tts_server --host 0.0.0.0 --port 8765 --output-dir generated_audio --ref-audio "reference.wav" --ref-text-file "reference.txt" --device cuda
+```
+
+`reference.wav` is the reference voice audio; `reference.txt` is its exact transcript. Keep the server running during the experiment. From the display computer, open `http://<GPU_IP>:8765/health` to check reachability; a health response does not confirm that model inference works. The two computers must be able to reach each other on port 8765.
+
 The model loads on the first request, then a single worker reuses it. The adapter maps target duration to F5-TTS inference duration, including reference duration in `fix_duration`. It does not pass WPM directly as relative model speed. Long tasks can be split internally and joined, but still produce one WAV for the requested sentence. See the [official inference implementation](https://github.com/SWivid/F5-TTS/blob/main/src/f5_tts/infer/utils_infer.py).
 
 The 5% WPM tolerance is a configurable engineering default, not a finalized experiment criterion. Duration includes generated pauses and leading/trailing silence. Content accuracy and voice quality require listening checks; automatic ASR content verification is not implemented. Real F5-TTS has not been tested on this setup.

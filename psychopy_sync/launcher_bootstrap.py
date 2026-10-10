@@ -102,5 +102,11 @@ def main():
     if runtime is None:
         show_error("No compatible PsychoPy environment found. Install PsychoPy, or install PsychoPy and wxPython in the project .venv, then launch again.")
         raise SystemExit(1)
+    command = [str(runtime.executable), "-m", "psychopy_sync.launcher"]
+    if sys.platform == "win32":
+        # Windows execve does not quote argv entries containing spaces. Use
+        # subprocess's Windows argument conversion for Program Files installs.
+        result = subprocess.run(command, cwd=PROJECT_ROOT, env=runtime.environment, check=False)
+        raise SystemExit(result.returncode)
     os.chdir(PROJECT_ROOT)
-    os.execve(str(runtime.executable), [str(runtime.executable), "-m", "psychopy_sync.launcher"], runtime.environment)
+    os.execve(str(runtime.executable), command, runtime.environment)
