@@ -8,15 +8,20 @@ import re
 import shutil
 from urllib.parse import urlsplit
 
-from shared.contracts import GenerationRequest
+from shared.contracts import GenerationRequest, TTS_PROTOCOL_VERSION, TTS_SERVICE
 from .f5_generator import DemoGenerator, F5Generator
-from .job_queue import AudioNotAvailable, JobQueue
+from .job_queue import AudioNotAvailable, JobQueue, ServiceNotReady
 
 
 class AudioServer(ThreadingHTTPServer):
     def __init__(self, address, jobs):
         self.jobs = jobs
         super().__init__(address, AudioHandler)
+
+    def readiness(self):
+        return dict(self.jobs.readiness(), service=TTS_SERVICE, protocol_version=TTS_PROTOCOL_VERSION,
+                    mode="demo" if getattr(self.jobs.generator, "demo_only", False) else "f5-tts",
+                    device=getattr(self.jobs.generator, "device", None))
 
 
 class AudioHandler(BaseHTTPRequestHandler):
@@ -49,12 +54,21 @@ class AudioHandler(BaseHTTPRequestHandler):
         except (ValueError, TypeError, UnicodeDecodeError) as exc:
             self._json(400, {"error": str(exc)})
             return
-        self._json(202, {"jobs": self.server.jobs.submit_batch(requests)})
+        try:
+            jobs = self.server.jobs.submit_batch(requests)
+        except ServiceNotReady as exc:
+            self._json(503, {"error": str(exc)})
+            return
+        self._json(202, {"jobs": jobs})
 
     def do_GET(self):
         path = urlsplit(self.path).path
         if path == "/health":
-            self._json(200, {"status": "ok", "model_loading": "on_first_job"})
+            self._json(200, {"status": "ok", "readiness": self.server.readiness()})
+            return
+        if path == "/ready":
+            readiness = self.server.readiness()
+            self._json(200 if readiness["ready"] else 503, readiness)
             return
         match = re.fullmatch(r"/jobs/([0-9a-f]{32})(/audio)?", path)
         if not match:
@@ -81,7 +95,7 @@ class AudioHandler(BaseHTTPRequestHandler):
             self._json(404, {"error": "Audio artifact is missing"})
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
@@ -93,7 +107,7 @@ def main():
     parser.add_argument("--model", default="F5TTS_v1_Base")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--wpm-tolerance", type=float, default=0.05)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.demo:
         generator = DemoGenerator()
     else:
@@ -103,11 +117,11 @@ def main():
             args.ref_audio, Path(args.ref_text_file).read_text(encoding="utf-8"),
             device=args.device, model=args.model, seed=args.seed,
         )
-    jobs = JobQueue(args.output_dir, generator, args.wpm_tolerance)
+    jobs = JobQueue(args.output_dir, generator, args.wpm_tolerance, verify_startup=True)
     try:
         with AudioServer((args.host, args.port), jobs) as server:
             print(f"Audio service listening on {args.host}:{server.server_port}", flush=True)
-            print("Demo silence only" if args.demo else "F5-TTS loads on the first job", flush=True)
+            print("Demo silence only" if args.demo else "Loading F5-TTS and running startup audio self-test...", flush=True)
             try:
                 server.serve_forever()
             except KeyboardInterrupt:

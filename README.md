@@ -25,13 +25,27 @@ eyelink_ip = "100.1.1.1"
 tts_server_url = ""
 ```
 
-Dummy mode is currently enabled. It skips the EyeLink connection, calibration, recording, package checks and EDF transfer. It keeps article selection, reading, flip timestamps, WPM, CSV logs and sentence audio preparation. Change it to `False` before testing the real EyeLink setup. The login and ready screen identify dummy mode in English.
+With `dummy_mode=True`, the experiment skips the EyeLink connection, calibration, recording, package checks and EDF transfer. It keeps article selection, reading, flip timestamps, WPM, CSV logs and sentence audio preparation. Set it to `False` for the real EyeLink setup. The login and ready screen identify dummy mode in English.
 
 The two counts control how many articles are sampled for each condition. Set `eyelink_ip` to the tracker address for real recording. Leave `tts_server_url` empty until the GPU address is known, then fill in its origin, such as `"http://192.168.1.20:8765"`. Save the file and reopen the launcher after changes. Internal display defaults and validation remain in `psychopy_sync/config.py`.
 
 Put one article in each `assets/articles/<article_id>.csv`. Each CSV has one column: the first cell is the title; each following nonempty cell is one sentence/page. Quote cells containing commas or line breaks. IDs use 1–32 ASCII letters, digits, underscores or hyphens. The article pool must contain at least the combined article count. The supplied four articles are sample text.
 
 Both conditions are sampled without replacement at startup. The seed, article order and stimulus snapshots are saved. Space starts an article, advances a page and ends the last page. Escape stops the session.
+
+## GPU server
+
+On the GPU computer, set the reference audio and transcript paths in [gpu_config.py](gpu_config.py). On **Ubuntu/Linux**, run:
+
+```sh
+bash start_gpu_server.sh
+```
+
+The script installs uv locally if missing, obtains Python 3.11 if needed, creates or reuses `.venv-gpu`, installs [GPU requirements](gpu_service/requirements.txt), selects a CUDA PyTorch build for the installed NVIDIA driver, checks GPU execution, and starts the service. Missing FFmpeg is installed through APT on Ubuntu (sudo may ask for your password). The first model load automatically downloads model weights. Subsequent starts reuse the environment and downloaded files. The NVIDIA driver must already work (`nvidia-smi`). No manual environment activation or separate CUDA Toolkit installation is needed.
+
+On **Windows**, `Start GPU Server.bat` still uses a manually prepared F5-TTS Python environment. `python start_gpu_server.py` is also a direct entry for an already prepared environment. Setting `GPU_PYTHON` makes the Linux script use that interpreter directly and bypass automatic setup. The GPU computer does not need PsychoPy or EyeLink packages. See [GPU setup](docs/network-audio.md) for configuration and commands.
+
+The service loads the model and generates a short test WAV at startup. The login checks readiness in the background when opened and again before each experiment. A configured server must pass its startup audio test before the experiment can begin. Loading is retried automatically; use **Recheck** after correcting an address/network error. An empty `tts_server_url` allows the reading-only workflow. Demo silence is accepted only in dummy mode.
 
 ## Data
 

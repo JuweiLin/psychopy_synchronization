@@ -10,14 +10,19 @@ import threading
 import uuid
 
 from shared.contracts import inspect_wav, sha256_file
+from .startup_check import verify_generator
 
 
 class AudioNotAvailable(RuntimeError):
     pass
 
 
+class ServiceNotReady(RuntimeError):
+    pass
+
+
 class JobQueue:
-    def __init__(self, output_dir, generator, wpm_tolerance=0.05):
+    def __init__(self, output_dir, generator, wpm_tolerance=0.05, verify_startup=False):
         if not math.isfinite(wpm_tolerance) or not 0 <= wpm_tolerance < 1:
             raise ValueError("WPM tolerance must be a fraction in [0, 1)")
         self.output_dir = Path(output_dir).resolve()
@@ -28,6 +33,9 @@ class JobQueue:
         self._lock = threading.Lock()
         self._pending = queue.Queue()
         self._stop = threading.Event()
+        self._verify_startup = verify_startup
+        self._startup_status = "starting" if verify_startup else "unchecked"
+        self._startup_error = None
         self._worker = threading.Thread(target=self._run, name="tts-worker", daemon=True)
         self._worker.start()
 
@@ -46,7 +54,9 @@ class JobQueue:
         snapshots = []
         with self._lock:
             if self._stop.is_set():
-                raise RuntimeError("Generation service is stopping")
+                raise ServiceNotReady("Generation service is stopping")
+            if self._verify_startup and self._startup_status != "ready":
+                raise ServiceNotReady(self._startup_error or "Model loading and startup audio test in progress")
             for request in requests:
                 job_id = uuid.uuid4().hex
                 self._directory(job_id).mkdir()
@@ -56,6 +66,12 @@ class JobQueue:
                 snapshots.append(dict(job))
                 self._pending.put((job_id, request))
         return snapshots
+
+    def readiness(self):
+        with self._lock:
+            status = "stopping" if self._stop.is_set() else self._startup_status
+            return dict(status=status, ready=status == "ready",
+                        warmup_verified=self._startup_status == "ready", error=self._startup_error)
 
     def snapshot(self, job_id):
         with self._lock:
@@ -83,6 +99,17 @@ class JobQueue:
             self._jobs[job_id] = job
 
     def _run(self):
+        if self._verify_startup:
+            try:
+                verify_generator(self.generator, self.wpm_tolerance)
+            except Exception as exc:
+                with self._lock:
+                    self._startup_status, self._startup_error = "failed", str(exc)
+                logging.exception("TTS startup self-test failed")
+                return
+            with self._lock:
+                self._startup_status = "ready"
+            print("TTS startup self-test passed. Service is ready.", flush=True)
         while not self._stop.is_set():
             item = self._pending.get()
             if item is None or self._stop.is_set():

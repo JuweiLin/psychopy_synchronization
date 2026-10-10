@@ -8,7 +8,8 @@ The current implementation ends after Condition 1 reading-speed measurement and 
 | `launch_experiment.py` | Calls runtime discovery |
 | `psychopy_sync/launcher_bootstrap.py` | Finds the PsychoPy/wx environment, including common Windows and macOS standalone installations |
 | `psychopy_sync/windows_python_picker.ps1` | Windows fallback file chooser and saved interpreter path |
-| `psychopy_sync/launcher.py` | English participant ID form, mode-aware dependency checks, experiment launch and results |
+| `psychopy_sync/launcher.py` | English ID form, asynchronous GPU checks on opening/before starting, dependency checks and results |
+| `psychopy_sync/server_check.py` | Bounded readiness requests, protocol/mode checks and readable connection failures |
 | `psychopy_sync/desktop_runner.py` | Runs the experiment in a separate process and returns its outcome to the form |
 | `config.py` | Five editable settings: dummy mode, condition counts, tracker IP and GPU URL |
 | `psychopy_sync/config.py` | Loads root settings; keeps internal defaults and validation |
@@ -24,7 +25,13 @@ The current implementation ends after Condition 1 reading-speed measurement and 
 | `psychopy_sync/audio_client.py` | Background submission, polling, download and local WAV verification |
 | `shared/contracts.py` | Audio request identity, target duration, checksums and PCM WAV inspection |
 | `gpu_service/tts_server.py` | HTTP audio service |
-| `gpu_service/job_queue.py` | One generation worker, WAV/WPM validation and atomic publication |
+| `gpu_config.py` | GPU host/port, reference files, device and demo switch |
+| `start_gpu_server.sh` | Linux automatic uv/Python bootstrap; starts the managed GPU environment |
+| `start_gpu_server.py`, `Start GPU Server.bat` | Direct GPU startup using a prepared F5-TTS environment |
+| `gpu_service/bootstrap.py`, `gpu_service/requirements.txt` | Isolated GPU environment creation/reuse, driver-based CUDA wheel selection, dependency installation and GPU probe |
+| `gpu_service/launcher.py` | Loads GPU config and validates reference paths and the Python environment |
+| `gpu_service/startup_check.py` | Generates and validates a temporary test WAV before readiness |
+| `gpu_service/job_queue.py` | One worker for startup testing and generation, readiness state, WAV/WPM validation and atomic publication |
 | `gpu_service/f5_generator.py` | F5-TTS adapter and an explicit demo-silence generator |
 | `psychopy_sync/calibration_check.py` | Separate calibration check; no experiment EDF recording |
 | `tests/` | Hardware-free timing, lifecycle, CSV, HTTP and launcher checks |

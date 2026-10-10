@@ -1,4 +1,6 @@
 __pycache__/
+.venv-gpu/
+.gpu-tools/
 *.py[cod]
 generated_audio/
 audio_cache/

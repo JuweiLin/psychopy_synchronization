@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Optional
 import wave
 
+TTS_SERVICE = "reading-experiment-tts"
+TTS_PROTOCOL_VERSION = 1
+
 
 def sha256_file(path):
     digest = hashlib.sha256()

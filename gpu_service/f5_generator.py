@@ -91,6 +91,8 @@ class F5Generator:
 class DemoGenerator:
     """Silent PCM fixtures for transport checks; never experimental stimuli."""
 
+    demo_only = True
+
     def generate(self, request, output_path):
         import wave
 

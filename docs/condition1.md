@@ -8,13 +8,13 @@
 4. Set `condition1_count` and `condition2_count` in the root `config.py`. Confirm that `assets/articles/` contains enough article CSVs.
 5. Leave `tts_server_url=""` for a recording-only test, or set the GPU service origin for audio generation. Save changes and reopen the launcher.
 
-Double-click `Start Experiment.bat` on Windows or `Start Experiment.command` on macOS, enter a participant ID and click **Start Experiment**. The terminal window is a launch helper; no command input is required. The login and experiment prompts are in English. The launcher checks only the modules required by the configured mode before starting; real tracker connectivity is checked by the experiment process.
+Double-click `Start Experiment.bat` on Windows or `Start Experiment.command` on macOS, enter a participant ID and click **Start Experiment**. The terminal window is a launch helper; no command input is required. The login and experiment prompts are in English. The launcher checks only the modules required by the configured mode before starting; real tracker connectivity is checked by the experiment process. When a GPU URL is configured, the login checks `/ready` in the background and again before each session. Loading is retried automatically. An offline, incompatible or failed server prevents starting; **Recheck** retries after a correction. The empty-URL reading-only workflow remains available.
 
 ## Dummy mode
 
-`dummy_mode` in the root `config.py` is currently `True`. This mode does not require or probe `pylink` or `EyeLinkCoreGraphicsPsychoPy`, does not connect to a tracker, and skips calibration and all recording/EDF operations. It shows a dummy ready screen before Condition 1. PsychoPy and wxPython are still required for the display and login.
+Set `dummy_mode=True` in the root `config.py` to use this mode. It does not require or probe `pylink` or `EyeLinkCoreGraphicsPsychoPy`, does not connect to a tracker, and skips calibration and all recording/EDF operations. It shows a dummy ready screen before Condition 1. PsychoPy and wxPython are still required for the display and login.
 
-Article selection, sentence pages, keyboard controls, flip timestamps, WPM calculation, event logs and TTS preparation run normally. `tts_server_url` still controls whether audio is generated; dummy mode does not disable the GPU service.
+Article selection, sentence pages, keyboard controls, flip timestamps, WPM calculation, event logs and TTS preparation run normally. `tts_server_url` still controls whether audio is generated; dummy mode does not disable the GPU service. A demo-silence server can pass the readiness check only in dummy mode; real EyeLink sessions require a verified F5-TTS server when a URL is configured.
 
 Dummy session files and global tables are stored under `data/dummy/`. Session metadata records `dummy_mode=true`, `edf_status=disabled_dummy`, an empty Host EDF filename and no EyeLink configuration. Local events use `marker_status=disabled_dummy`, not `sent`. No synthetic eye data or EDF is created. The TTS manifest also records the mode.
 
