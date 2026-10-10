@@ -54,6 +54,24 @@ class LauncherTests(unittest.TestCase):
         result = json.loads(self.result_path.read_text())
         self.assertEqual(result_message(result)[0], "Session stopped")
 
+    def test_edf_download_success_is_visible_in_the_results(self):
+        title, message = result_message(dict(status="completed", directory="data/S001/run",
+            summary=dict(speed_per_minute=120, speed_unit="words/min"), edf_status="downloaded",
+            edf_path="data/S001/run/eyelink.edf", edf_bytes=1234, screenshots_status="saved"))
+        self.assertEqual(title, "Session complete")
+        self.assertIn("EDF saved: data/S001/run/eyelink.edf (1,234 bytes)", message)
+        self.assertIn("Data Viewer image links saved", message)
+
+    def test_abort_retains_edf_recovery_name_and_directory_in_results(self):
+        error = ExperimentAborted("Escape pressed")
+        error.session_result = dict(directory="data/S001/run", edf_status="recovery_required", host_edf_name="ABC123.EDF")
+        self.assertEqual(execute("S001", self.result_path, Mock(side_effect=error)), 130)
+        result = json.loads(self.result_path.read_text())
+        title, message = result_message(result)
+        self.assertEqual(title, "Session stopped")
+        self.assertIn("data/S001/run", message)
+        self.assertIn("Recover ABC123.EDF", message)
+
     def test_failure_returns_an_error_instead_of_success(self):
         runner = Mock(side_effect=ConnectionError("EyeLink unavailable"))
         with patch("psychopy_sync.desktop_runner.traceback.print_exc"):

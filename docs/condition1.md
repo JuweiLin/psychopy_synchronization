@@ -31,7 +31,7 @@ At startup, the code randomly selects `condition1_count + condition2_count` dist
 ## Session sequence
 
 1. Create a new session under the participant ID, register the ID if needed, and save article selection and both conditions' stimulus snapshots.
-2. Connect to EyeLink, open the PsychoPy window and prepare the pages for both conditions. Oversized pages fail validation rather than being split.
+2. Connect to EyeLink, open the PsychoPy window and prepare the pages for both conditions. Oversized pages fail validation rather than being split. Capture every selected page to a full-screen PNG in the back buffer before calibration/recording.
 3. Configure and run EyeLink calibration. The default is HV9 with automatic calibration start and 1000 ms pacing.
 4. Open the Host EDF and start one continuous recording. Calibration itself is outside this EDF recording.
 5. Show the operator confirmation screen. Verify calibration/validation on the Host before pressing Space.
@@ -39,14 +39,14 @@ At startup, the code randomly selects `condition1_count + condition2_count` dist
 7. After every Condition 1 article is completed, compute and save reading speed.
 8. Create the participant/session TTS directory and submit every selected Condition 2 sentence in background HTTP batches of at most 100. GPU generation is queued in article/sentence order.
 9. Wait only for the next article's complete set of verified local WAVs, then preload them on the main thread. Press Space to begin the article. Display each CSV sentence, schedule its corresponding WAV using PTB, and automatically advance after audio completion. Later articles continue generating/downloading in the background. Repeat for each Condition 2 article.
-10. Stop recording after both conditions, close and download the EDF in real mode, and close the experiment window. The login window returns with the reading speed and data directory.
+10. Stop recording after both conditions, close and download the EDF in real mode, and close the experiment window. The login window returns with the reading speed, data directory and verified EDF path/byte count or recovery filename.
 
 With no service URL, Condition 2 is explicitly skipped, its article rows remain `not_presented`, and requests/index files are saved as `not_configured`.
 
 ## Timing and messages
 
 - `ARTICLE_ONSET`: bound to the flip that displays the first page.
-- `PAGE_ONSET`: bound to each subsequent page's first flip.
+- `PAGE_ONSET` / `PAGE_END`: bound to every sentence's display/removal flip in both conditions.
 - `ARTICLE_END`: bound to the flip that removes the last page.
 - Condition 2 also logs every `PAGE_ONSET` and `PAGE_END`, plus `AUDIO_START`, `AUDIO_END` and interrupted playback (`AUDIO_ABORT`). `AUDIO_START` records the display flip and requested PTB start time, job ID and WAV path. `AUDIO_END` records when the main loop observes PTB completion. These are software playback events, not measured acoustic onset/offset. Verify physical audiovisual timing on the experiment hardware; see [PsychoPy scheduling](https://psychopy.org/api/sound/playback.html#preschedule-your-sound).
 
@@ -101,6 +101,8 @@ Without a service URL, requests, manifest and index are saved as `not_configured
 
 Escape or an exception triggers cleanup and data saving, with an attempted EDF download in real mode. A partially completed Condition 1 does not publish a complete reading speed or start TTS. Exiting during TTS or Condition 2 playback preserves saved speed, cached files and partial presentation logs; active audio is stopped. It stops further local polling/downloads but does not cancel jobs already accepted by the GPU.
 
-EDF transfer first writes `.partial.edf` and publishes `eyelink.edf` only after success. Transfer failure records `edf_status=recovery_required` and the Host EDF filename for manual recovery. Forced termination or power loss can lose locally buffered events; inspect the Host recording for recovery.
+EDF transfer first writes `.partial.edf`, retries up to three times, and publishes `eyelink.edf` only after the received byte count matches a nonempty local file. Transfer failure records `edf_status=recovery_required` and the Host EDF filename for manual recovery; the login also displays the recovery name. Forced termination or power loss can lose locally buffered events; inspect the Host recording for recovery.
+
+Data Viewer trials are per sentence, with relative screenshot paths sent via `!V IMGLOAD FILL`. This does not interrupt continuous recording or change article-level WPM. `sentence_pages.csv` indexes the images and visible intervals. AOIs are created later in Data Viewer; see [EDF and sentence images](data-viewer.md).
 
 One experiment process should own an output directory. Global CSV tables do not support concurrent writers. Hardware and real model behavior still need testing on the experiment computers.

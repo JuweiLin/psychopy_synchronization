@@ -20,6 +20,7 @@ The experiment measures Condition 1 reading speed, then presents Condition 2 sen
 | `psychopy_sync/condition2.py` | Waits/preloads each article, presents sentence text/audio and saves complete/partial presentation timing |
 | `psychopy_sync/reading_speed.py` | Calculates speed from total words and summed article reading durations |
 | `psychopy_sync/event_log.py` | ID registry, session tables, snapshots, timestamped events and EyeLink messages |
+| `psychopy_sync/data_viewer.py` | Pre-recording full-screen sentence PNGs, per-sentence Data Viewer trials, image messages and visible intervals |
 | `psychopy_sync/eyelink.py` | Real connection/calibration/recording/EDF transfer; an SDK-free dummy controller |
 | `psychopy_sync/display.py` | Creates the experiment window; verifies and preloads sentence WAVs using PTB |
 | `psychopy_sync/session_audio.py` | Prepares per-sentence requests, WAV paths, metadata, manifest and `tts_index.csv` |

@@ -24,6 +24,10 @@ LOG_FIELDS = ["participant_id", "session_id", "event_id", "event", "condition", 
 USER_FIELDS = ["participant_id", "created_at_utc"]
 SPEED_FIELDS = ["participant_id", "session_id", "article_count", "total_units", "count_mode",
                 "total_reading_s", "speed_per_minute", "speed_unit", "timing_source"]
+SENTENCE_FIELDS = ["participant_id", "session_id", "condition", "article_id", "sentence_index",
+                   "source_row", "text", "trial_id", "screenshot_path", "screenshot_status",
+                   "screenshot_sha256", "width_px", "height_px", "status", "start_event_id",
+                   "end_event_id", "start_timestamp_s", "end_timestamp_s", "duration_s"]
 
 
 def utc_now():
@@ -101,6 +105,23 @@ class SessionStore:
                              dummy_mode=config.dummy_mode,
                              host_edf_name="" if config.dummy_mode else uuid.uuid4().hex[:8].upper() + ".EDF",
                              edf_status="disabled_dummy" if config.dummy_mode else "not_opened")
+        self.metadata.update(edf_path="", edf_bytes=0,
+                             edf_expected_path=str((self.directory / "eyelink.edf").resolve()),
+                             dataviewer_trial_unit="sentence", screenshots_status="pending",
+                             screenshots_directory=str((self.directory / "screenshots").resolve()),
+                             sentence_index_path=str((self.directory / "sentence_pages.csv").resolve()))
+        self.sentences = []
+        for condition, selected in articles.items():
+            for article in selected:
+                for index, (text, source_row) in enumerate(zip(article.pages, article.source_rows), 1):
+                    self.sentences.append(dict(
+                        participant_id=participant_id, session_id=self.session_id, condition=condition,
+                        article_id=article.article_id, sentence_index=index, source_row=source_row, text=text,
+                        trial_id=f"c{condition[-1]}_{article.article_id}_s{index:04d}",
+                        screenshot_path=f"screenshots/{condition}/{article.article_id}/sentence_{index:04d}.png",
+                        screenshot_status="pending", screenshot_sha256="", width_px="", height_px="",
+                        status="not_presented", start_event_id="", end_event_id="",
+                        start_timestamp_s="", end_timestamp_s="", duration_s=""))
         first_article = articles["condition1"][0]
         self.metadata["selection_seed"] = first_article.sampling_seed
         self.metadata["article_pool_ids"] = first_article.pool_article_ids
@@ -123,6 +144,7 @@ class SessionStore:
     def save(self):
         for condition, rows in self.rows.items():
             write_csv(self.directory / (condition + ".csv"), ARTICLE_FIELDS, rows)
+        write_csv(self.directory / "sentence_pages.csv", SENTENCE_FIELDS, self.sentences)
         temporary = self.directory / "session.json.tmp"
         temporary.write_text(json.dumps(self.metadata, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         temporary.replace(self.directory / "session.json")
@@ -144,12 +166,14 @@ class EventLog:
         self.path = store.directory / "user_logs.csv"
         write_csv(self.path, LOG_FIELDS, [])
 
-    def emit(self, event, condition="", article_id="", page="", timestamp=None, detail=""):
+    def emit(self, event, condition="", article_id="", page="", timestamp=None, detail="", marker=None):
         self.sequence += 1
         event_id = f"E{self.sequence:06d}"
         source = "psychopy_clock" if timestamp is None else "psychopy_flip"
         timestamp = self.clock() if timestamp is None else timestamp
-        message = f"{event_id} {event} {condition} {article_id} p={page} t={timestamp:.9f}"
+        # Data Viewer commands must start with TRIALID / !V / TRIAL_RESULT;
+        # prefixing them with our event ID would make them unrecognizable.
+        message = marker if marker is not None else f"{event_id} {event} {condition} {article_id} p={page} t={timestamp:.9f}"
         row = dict(participant_id=self.store.participant_id, session_id=self.store.session_id,
                    event_id=event_id, event=event, condition=condition, article_id=article_id,
                    page=page, timestamp_s=timestamp, timestamp_source=source, logged_at_utc=utc_now(),

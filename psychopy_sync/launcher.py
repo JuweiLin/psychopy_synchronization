@@ -23,6 +23,15 @@ def experiment_command(participant_id, result_path):
 
 
 def result_message(result):
+    details = ""
+    if result.get("edf_status") == "downloaded":
+        details += f"\nEDF saved: {result['edf_path']} ({result.get('edf_bytes', 0):,} bytes)"
+    elif result.get("edf_status") == "recovery_required":
+        details += f"\nEDF download failed. Recover {result.get('host_edf_name', '')} from the EyeLink Host."
+    elif result.get("edf_status") == "not_opened":
+        details += "\nEyeLink recording did not start; no EDF was created."
+    if result.get("screenshots_status") == "saved":
+        details += "\nSentence screenshots and Data Viewer image links saved."
     if result.get("status") == "completed":
         summary = result["summary"]
         text = f"Reading speed: {summary['speed_per_minute']:.2f} {summary['speed_unit']}\nData saved to: {result['directory']}"
@@ -34,10 +43,18 @@ def result_message(result):
             text += "\nCondition 2 completed. Sentence audio and playback logs saved."
         elif result.get("tts_status") == "cached":
             text += "\nCondition 2 sentence audio saved."
-        return "Session complete", text
+        return "Session complete", text + details
     if result.get("status") == "aborted":
-        return "Session stopped", "Available session data has been saved."
-    return "Session failed", result.get("error") or "The experiment process exited unexpectedly."
+        text = "Available session data has been saved."
+        if result.get("directory"):
+            text += f"\nData saved to: {result['directory']}"
+        if result.get("dummy_mode"):
+            text += "\nDummy mode: no eye tracking was recorded."
+        return "Session stopped", text + details
+    text = result.get("error") or "The experiment process exited unexpectedly."
+    if result.get("directory"):
+        text += f"\nSession data: {result['directory']}"
+    return "Session failed", text + details
 
 
 def main():
@@ -98,7 +115,10 @@ def main():
             gpu_row.Add(self.gpu_check_button, 0, wx.ALIGN_CENTER_VERTICAL)
             layout.Add(gpu_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 32)
             self.status_title = label("Dummy mode — no eye tracking" if self.config.dummy_mode else "EyeLink recording mode", 12, "#40516A")
-            self.status = label("", 11, "#63708A")
+            self.status = wx.TextCtrl(panel, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.BORDER_NONE)
+            self.status.SetFont(wx.Font(11, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
+            self.status.SetForegroundColour("#63708A")
+            self.status.SetBackgroundColour("#F5F6F8")
             layout.AddSpacer(16)
             layout.Add(self.status_title, 0, wx.LEFT | wx.RIGHT, 32)
             layout.AddSpacer(8)
@@ -163,7 +183,7 @@ def main():
                 self.error.SetLabel("Missing components: " + ", ".join(missing))
                 self.error.Wrap(476)
                 self.status_title.SetLabel("Setup required")
-                self.status.SetLabel("Install the missing PsychoPy / audio / EyeLink components, then try again.")
+                self.status.SetValue("Install the missing PsychoPy / audio / EyeLink components, then try again.")
                 self.Layout()
                 return
             # Recheck before each session, even if the initial launch check passed.
@@ -192,7 +212,7 @@ def main():
             self.participant.Disable()
             self.gpu_check_button.Disable()
             self.status_title.SetLabel("Session in progress")
-            self.status.SetLabel("Continue in the experiment window. Press Escape to stop.")
+            self.status.SetValue("Continue in the experiment window. Press Escape to stop.")
             self.timer.Start(250)
             self.Hide()
 
@@ -212,8 +232,8 @@ def main():
                 message += f"\nDiagnostic log: {self.log_path}"
             self.release()
             self.status_title.SetLabel(title)
-            self.status.SetLabel(message)
-            self.status.Wrap(476)
+            self.status.SetValue(message)
+            self.status.SetInsertionPoint(0)
             self.start_button.SetLabel("Start New Session")
             self.start_button.Enable(self.server_result is not None and self.server_result.can_start)
             self.gpu_check_button.Enable()

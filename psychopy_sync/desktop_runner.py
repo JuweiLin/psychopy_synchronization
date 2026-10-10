@@ -9,6 +9,15 @@ from .condition1 import ExperimentAborted
 from .event_log import validate_participant_id
 
 
+def session_details(metadata, directory=None):
+    fields = ("tts_status", "condition2_status", "dummy_mode", "edf_status", "edf_path", "edf_bytes",
+              "host_edf_name", "edf_error", "screenshots_status", "screenshots_directory", "sentence_index_path")
+    result = {name: metadata[name] for name in fields if name in metadata}
+    if directory is not None:
+        result["directory"] = str(directory)
+    return result
+
+
 def execute(participant_id, result_path, runner=None):
     try:
         validate_participant_id(participant_id)
@@ -17,16 +26,16 @@ def execute(participant_id, result_path, runner=None):
             runner = run_experiment
         summary, directory = runner(participant_id)
         metadata = json.loads((Path(directory) / "session.json").read_text(encoding="utf-8"))
-        result = dict(status="completed", summary=summary, directory=str(directory),
-                      tts_status=metadata.get("tts_status"), condition2_status=metadata.get("condition2_status"),
-                      dummy_mode=metadata.get("dummy_mode", False))
+        result = dict(status="completed", summary=summary, **session_details(metadata, directory))
         code = 0
-    except (ExperimentAborted, KeyboardInterrupt):
-        result = dict(status="aborted")
+    except (ExperimentAborted, KeyboardInterrupt) as exc:
+        metadata = getattr(exc, "session_result", {})
+        result = dict(status="aborted", **session_details(metadata, metadata.get("directory")))
         code = 130
     except Exception as exc:
         traceback.print_exc()
-        result = dict(status="failed", error=str(exc))
+        metadata = getattr(exc, "session_result", {})
+        result = dict(status="failed", error=str(exc), **session_details(metadata, metadata.get("directory")))
         code = 1
     path = Path(result_path)
     temporary = path.with_suffix(".json.tmp")

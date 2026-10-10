@@ -35,7 +35,6 @@ def run_condition2(view, articles, prepared, audio, log, store):
                 row["status"] = "presenting"
                 store.save()
                 log.emit("TRIAL_START", "condition2", article.article_id)
-                view.controller.send_marker(f"TRIALID {article.article_id}")
                 for page_index, (page, playback, sentence) in enumerate(zip(pages, sounds, cached), 1):
                     view.play_page(page, playback, sentence, log, start, article.article_id, page_index)
                 view.clear_article(log, end, "ARTICLE_END", article.article_id,
@@ -43,7 +42,6 @@ def run_condition2(view, articles, prepared, audio, log, store):
                 row.update(status="completed", start_event_id=start["event_id"], end_event_id=end["event_id"],
                            start_timestamp_s=start["timestamp_s"], end_timestamp_s=end["timestamp_s"],
                            reading_duration_s=end["timestamp_s"] - start["timestamp_s"])
-                view.controller.send_marker("TRIAL_RESULT 0")
             except BaseException as exc:
                 row["status"] = "aborted" if isinstance(exc, ExperimentAborted) else "failed"
                 if start:
@@ -51,7 +49,7 @@ def run_condition2(view, articles, prepared, audio, log, store):
                     if not end:
                         try:
                             view.clear_article(log, end, "ARTICLE_ABORT", article.article_id,
-                                               condition="condition2", page=page_index)
+                                               condition="condition2", page=page_index, page_status=row["status"])
                         except Exception:
                             pass
                     if end:

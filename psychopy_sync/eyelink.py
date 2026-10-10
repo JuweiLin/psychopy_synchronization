@@ -163,17 +163,32 @@ class EyeLinkController:
             return False
         self.stop_recording()
         self.tracker.setOfflineMode()
+        self._pylink.pumpDelay(500)
         if self._edf_open:
-            self.tracker.closeDataFile()
+            result = self.tracker.closeDataFile()
+            if result not in (None, 0):
+                raise IOError(f"Could not close {self._edf_name} on Host: {result}")
             self._edf_open = False
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
         partial = destination.with_suffix(".partial.edf")
-        transferred = self.tracker.receiveDataFile(self._edf_name, str(partial))
-        if transferred <= 0 or not partial.exists() or partial.stat().st_size == 0:
-            raise IOError(f"EDF transfer failed; recover {self._edf_name} from the Host")
-        partial.replace(destination)
-        return True
+        error = None
+        for attempt in range(3):
+            try:
+                # A fresh staging file prevents a stale partial download from
+                # passing verification after a failed retry.
+                partial.unlink(missing_ok=True)
+                transferred = self.tracker.receiveDataFile(self._edf_name, str(partial))
+                size = partial.stat().st_size if partial.exists() else 0
+                if not isinstance(transferred, int) or transferred <= 0 or size != transferred:
+                    raise IOError(f"transfer returned {transferred!r}; local file has {size} bytes")
+                partial.replace(destination)
+                return True
+            except Exception as exc:
+                error = exc
+                if attempt < 2:
+                    self._pylink.pumpDelay(500)
+        raise IOError(f"EDF transfer failed; recover {self._edf_name} from the Host: {error}") from error
 
     def close(self):
         """Release graphics and the connection, including after setup errors."""

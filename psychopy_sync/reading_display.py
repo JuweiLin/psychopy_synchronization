@@ -1,6 +1,7 @@
 """Main-thread PsychoPy reading UI; all layouts are prepared before recording."""
 
 from .condition1 import ExperimentAborted
+from .data_viewer import DataViewerExport
 
 
 class ReadingDisplay:
@@ -11,23 +12,34 @@ class ReadingDisplay:
         self.win, self.config, self.controller = win, config, controller
         self.visual = visual
         self.keyboard = Keyboard()
+        self.data_viewer = None
         self.text_width = int(win.size[0] * config.text_width_fraction)
         self.text_height = int(win.size[1] * config.text_height_fraction)
-        self.prompt = visual.TextStim(win, text="", height=config.text_height_px, color="white",
-                                      font=config.font, wrapWidth=self.text_width, autoLog=False)
-        self.footer = visual.TextStim(win, text=f"{config.advance_key.upper()}: next page / finish", height=20, color="white",
-                                      pos=(0, -win.size[1] * 0.44), autoLog=False)
+        scale = self.text_scale
+        self.prompt = visual.TextStim(win, text="", height=config.text_height_px / scale, color="white",
+                                      font=config.font, wrapWidth=self.text_width / scale, autoLog=False)
+        self.footer = visual.TextStim(win, text=f"{config.advance_key.upper()}: next page / finish", height=20 / scale, color="white",
+                                      pos=(0, -win.size[1] * 0.44 / scale), autoLog=False)
+
+    @property
+    def text_scale(self):
+        # Legacy TextStim's Window.setScale('pix') applies a 2x Retina
+        # multiplier, although win.size / DISPLAY_COORDS use framebuffer
+        # pixels. New OpenGL backends do not apply this legacy multiplier.
+        return 2.0 if (getattr(self.win, "useRetina", False)
+                       and getattr(self.win, "USE_LEGACY_GL", False)) else 1.0
 
     def prepare(self, articles):
         prepared = {}
+        scale = self.text_scale
         for article in articles:
-            probe = self.visual.TextStim(self.win, text="", height=self.config.text_height_px,
-                                         font=self.config.font, wrapWidth=self.text_width, autoLog=False)
+            probe = self.visual.TextStim(self.win, text="", height=self.config.text_height_px / scale,
+                                         font=self.config.font, wrapWidth=self.text_width / scale, autoLog=False)
 
             def fits(text):
                 probe.text = text
                 width, height = probe.boundingBox
-                return width <= self.text_width and height <= self.text_height
+                return width * scale <= self.text_width and height * scale <= self.text_height
 
             page_texts = article.pages
             for index, text in enumerate(page_texts, 1):
@@ -35,10 +47,41 @@ class ReadingDisplay:
                     raise ValueError(f"Article {article.title!r}, page {index} exceeds the configured display area; "
                                      "adjust the prepared CSV page or the text layout")
             prepared[article.article_id] = [self.visual.TextStim(
-                self.win, text=text, height=self.config.text_height_px, font=self.config.font,
-                wrapWidth=self.text_width, color="white", alignText="left", autoLog=False,
+                self.win, text=text, height=self.config.text_height_px / scale, font=self.config.font,
+                wrapWidth=self.text_width / scale, color="white", alignText="left", autoLog=False,
             ) for text in page_texts]
         return prepared
+
+    def export_pages(self, store, articles, prepared):
+        self.prompt.text = "Preparing sentence images. Please wait."
+        self.prompt.draw()
+        # Establish the normal post-flip projection/viewport before taking
+        # back-buffer captures, including on Retina displays.
+        self.win.flip()
+        self.data_viewer = DataViewerExport(store)
+        self.data_viewer.prepare(self, articles, prepared)
+
+    def draw_page(self, page, condition):
+        page.draw()
+        if condition == "condition1":
+            self.footer.draw()
+
+    def _page_on_flip(self, log, onset, condition, article_id, page_index):
+        timing = {}
+        self.win.timeOnFlip(timing, "timestamp")
+
+        def callback():
+            timestamp = timing["timestamp"]
+            self.data_viewer.start_page(log, condition, article_id, page_index, timestamp)
+            if page_index == 1:
+                onset.update(log.emit("ARTICLE_ONSET", condition, article_id, page=1, timestamp=timestamp))
+
+        self.win.callOnFlip(callback)
+
+    def show_saving(self):
+        self.prompt.text = "Saving session data. Please wait."
+        self.prompt.draw()
+        self.win.flip()
 
     def _advance_key_held(self):
         state = self.keyboard.getState(self.config.advance_key)
@@ -75,15 +118,15 @@ class ReadingDisplay:
 
     def read_page(self, page, log, onset, event, article_id, page_index):
         def draw():
-            page.draw()
-            self.footer.draw()
+            self.draw_page(page, "condition1")
 
-        self._wait(draw, lambda: log.on_flip(self.win, onset, event, condition="condition1",
-                                            article_id=article_id, page=page_index))
+        self._wait(draw, lambda: self._page_on_flip(log, onset, "condition1", article_id, page_index))
 
-    def clear_article(self, log, end, event, article_id, condition="condition1", page=None):
-        if page is not None:
-            log.on_flip(self.win, {}, "PAGE_END", condition=condition, article_id=article_id, page=page)
+    def clear_article(self, log, end, event, article_id, condition="condition1", page=None, page_status="completed"):
+        self.win.clearBuffer()
+        timing = {}
+        self.win.timeOnFlip(timing, "timestamp")
+        self.win.callOnFlip(lambda: self.data_viewer.end_page(log, timing["timestamp"], status=page_status))
         log.on_flip(self.win, end, event, condition=condition, article_id=article_id)
         self.win.flip()
 
@@ -118,11 +161,7 @@ class ReadingDisplay:
         detail = f"scheduled_ptb_s={scheduled:.9f}; job_id={cached.job_id}; path={cached.path}"
         try:
             playback.play(when=scheduled)
-            if page_index > 1:
-                log.on_flip(self.win, {}, "PAGE_END", condition="condition2", article_id=article_id, page=page_index - 1)
-            else:
-                log.on_flip(self.win, onset, "ARTICLE_ONSET", condition="condition2", article_id=article_id, page=1)
-            log.on_flip(self.win, {}, "PAGE_ONSET", condition="condition2", article_id=article_id, page=page_index)
+            self._page_on_flip(log, onset, "condition2", article_id, page_index)
             log.on_flip(self.win, {}, "AUDIO_START", condition="condition2", article_id=article_id,
                         page=page_index, detail=detail)
             self.win.flip()

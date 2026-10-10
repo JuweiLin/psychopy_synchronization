@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 from psychopy_sync.articles import load_experiment_articles
 from psychopy_sync.condition1 import ExperimentAborted
 from psychopy_sync.config import ExperimentConfig, EyeLinkConfig
+from psychopy_sync.data_viewer import DataViewerExport
 from psychopy_sync.event_log import EventLog, SessionStore
 from psychopy_sync.experiment import run_experiment
 from psychopy_sync.eyelink import EyeLinkController
@@ -26,6 +27,16 @@ def read_csv(path):
 class FakeWin:
     def __init__(self):
         self.size, self.now, self.callbacks, self.closed = (1920, 1080), 0.0, [], False
+        self.movieFrames = []
+
+    def clearBuffer(self):
+        pass
+
+    def getMovieFrame(self, buffer):
+        assert buffer == "back"
+        image = types.SimpleNamespace(size=self.size, save=lambda path, format: Path(path).write_bytes(b"fake-png"))
+        self.movieFrames.append(image)
+        return image
 
     def timeOnFlip(self, obj, key):
         self.callOnFlip(lambda: obj.update({key: self.now}))
@@ -47,6 +58,14 @@ class FakeView:
 
     def __init__(self, win, config, controller):
         self.win, self.config, self.controller = win, config, controller
+        self.data_viewer = None
+        self.draw_page = MagicMock()
+        self.prompt = MagicMock()
+
+    export_pages = ReadingDisplay.export_pages
+
+    def show_saving(self):
+        pass
 
     def prepare(self, articles):
         return {a.article_id: list(a.pages) for a in articles}
@@ -59,15 +78,14 @@ class FakeView:
 
     def read_page(self, page, log, onset, event, article_id, page_index):
         self.win.now += 1
-        log.on_flip(self.win, onset, event, condition="condition1", article_id=article_id, page=page_index)
+        ReadingDisplay._page_on_flip(self, log, onset, "condition1", article_id, page_index)
         self.win.flip()
         if article_id == self.abort_article:
             raise ExperimentAborted("Escape pressed")
 
-    def clear_article(self, log, end, event, article_id):
+    def clear_article(self, log, end, event, article_id, **kwargs):
         self.win.now += 10
-        log.on_flip(self.win, end, event, condition="condition1", article_id=article_id)
-        self.win.flip()
+        ReadingDisplay.clear_article(self, log, end, event, article_id, **kwargs)
 
 
 class ExperimentTests(unittest.TestCase):
@@ -147,6 +165,19 @@ class ExperimentTests(unittest.TestCase):
         self.assertTrue(sentence_rows[0]["planned_audio_path"].endswith("C/sentence_0001.wav"))
         self.assertEqual(list(tts_directory.glob("*.wav")), [])
         self.assertEqual(read_csv(directory / "condition2.csv")[0]["audio_status"], "not_configured")
+        self.assertEqual(metadata["edf_path"], str((directory / "eyelink.edf").resolve()))
+        self.assertEqual(metadata["edf_bytes"], 8)
+        self.assertEqual(metadata["screenshots_status"], "saved")
+        pages = read_csv(directory / "sentence_pages.csv")
+        self.assertEqual([r["status"] for r in pages], ["completed", "completed", "not_presented"])
+        self.assertTrue(all((directory / r["screenshot_path"]).is_file() for r in pages))
+        self.assertEqual(self.win.movieFrames, [])
+        markers = [call.args[0] for call in self.controller.send_marker.call_args_list]
+        self.assertEqual(len([m for m in markers if m.startswith("TRIALID ")]), 2)
+        self.assertEqual(markers.count("SENTENCE_ONSET"), 2)
+        self.assertEqual(markers.count("SENTENCE_OFFSET"), 2)
+        self.assertEqual(markers.count("TRIAL_RESULT 0"), 2)
+        self.assertTrue(all(m.isascii() and len(m) <= 130 for m in markers))
 
     def test_dummy_session_runs_without_eyelink_packages_calibration_or_edf(self):
         config = replace(self.config, dummy_mode=True)
@@ -246,6 +277,52 @@ class ExperimentTests(unittest.TestCase):
         self.assertRegex(metadata["host_edf_name"], r"^[A-Z0-9]{8}\.EDF$")
         self.controller.close.assert_called_once_with()
         self.assertTrue(self.win.closed)
+
+    def test_each_condition1_sentence_has_its_own_trial_and_exact_visible_interval(self):
+        (self.config.assets_dir / "articles" / "A.csv").write_text("One\nFirst sentence.\nSecond sentence.\n")
+        summary, directory = run_experiment("S001", self.config)
+        self.assertEqual(summary["total_reading_s"], 21)
+        pages = [row for row in read_csv(directory / "sentence_pages.csv") if row["condition"] == "condition1"]
+        self.assertEqual([float(row["duration_s"]) for row in pages], [1, 10, 10])
+        self.assertEqual(pages[0]["end_timestamp_s"], pages[1]["start_timestamp_s"])
+        logs = read_csv(directory / "user_logs.csv")
+        events = {row["event_id"]: row for row in logs}
+        for row in pages:
+            self.assertEqual(events[row["start_event_id"]]["event"], "PAGE_ONSET")
+            self.assertEqual(events[row["end_event_id"]]["event"], "PAGE_END")
+        depth = 0
+        for row in logs:
+            if row["message"].startswith("TRIALID "):
+                self.assertEqual(depth, 0)
+                depth = 1
+            if row["message"].startswith("TRIAL_RESULT "):
+                self.assertEqual(depth, 1)
+                depth = 0
+            if row["message"].startswith("!V "):
+                self.assertEqual(depth, 1)
+        self.assertEqual(depth, 0)
+
+    def test_abort_and_transfer_failure_keep_session_context_for_the_login(self):
+        self.controller.finish_session.side_effect = IOError("connection lost")
+        with patch.object(FakeView, "abort_article", self.article_ids["Two"]):
+            with self.assertRaises(ExperimentAborted) as caught:
+                run_experiment("S001", self.config)
+        result = caught.exception.session_result
+        self.assertEqual(result["edf_status"], "recovery_required")
+        self.assertEqual(Path(result["directory"]), self.session_dir())
+        pages = read_csv(self.session_dir() / "sentence_pages.csv")
+        self.assertEqual(pages[1]["status"], "aborted")
+        self.assertIn("TRIAL_RESULT 1", [r["message"] for r in read_csv(self.session_dir() / "user_logs.csv")])
+
+    def test_missing_local_edf_cannot_be_reported_as_downloaded(self):
+        self.controller.finish_session.side_effect = None
+        self.controller.finish_session.return_value = True
+        with self.assertRaisesRegex(RuntimeError, "no nonempty local EDF"):
+            run_experiment("S001", self.config)
+        metadata = json.loads((self.session_dir() / "session.json").read_text())
+        self.assertEqual(metadata["edf_status"], "recovery_required")
+        self.assertEqual(metadata["status"], "failed")
+        self.assertEqual(metadata["edf_path"], "")
 
     def test_missing_articles_fail_before_hardware_or_registration(self):
         with self.assertRaisesRegex(ValueError, "requires 4 distinct"):
@@ -368,6 +445,28 @@ class ExperimentTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "page 1 exceeds"):
             view.prepare([article])
 
+    def test_legacy_retina_text_layout_uses_the_same_framebuffer_coordinates_as_eyelink(self):
+        class TextStim:
+            def __init__(self, win, text="", **kwargs):
+                self.text, self.options = text, kwargs
+
+            @property
+            def boundingBox(self):
+                return len(self.text), 1
+
+        article = load_experiment_articles(self.config)["condition1"][0]
+        for retina, legacy, scale in ((False, True, 1), (True, True, 2), (True, False, 1)):
+            with self.subTest(retina=retina, legacy=legacy):
+                self.win.useRetina, self.win.USE_LEGACY_GL = retina, legacy
+                psychopy = types.SimpleNamespace(visual=types.SimpleNamespace(TextStim=TextStim))
+                with patch.dict("sys.modules", {"psychopy": psychopy,
+                        "psychopy.hardware.keyboard": types.SimpleNamespace(Keyboard=MagicMock)}):
+                    view = ReadingDisplay(self.win, self.config, self.controller)
+                page = view.prepare([article])[article.article_id][0]
+                self.assertEqual(page.options["height"] * scale, self.config.text_height_px)
+                self.assertEqual(page.options["wrapWidth"] * scale, view.text_width)
+                self.assertEqual(view.footer.options["pos"][1] * scale, -self.win.size[1] * 0.44)
+
     def test_invalid_reading_intervals_are_rejected(self):
         row = dict(status="completed", count_mode="words", unit_count=10,
                    start_event_id="E1", end_event_id="E2", start_timestamp_s=10, end_timestamp_s=10)
@@ -402,7 +501,7 @@ class EDFLifecycleTests(unittest.TestCase):
         self.tracker = MagicMock()
         self.controller._tracker = self.tracker
         self.controller._pylink = MagicMock()
-        for method in ("openDataFile", "startRecording", "isRecording", "sendMessage"):
+        for method in ("openDataFile", "closeDataFile", "startRecording", "isRecording", "sendMessage"):
             getattr(self.tracker, method).return_value = 0
 
     def test_pupil_fields_continuous_recording_and_atomic_transfer(self):
@@ -446,6 +545,40 @@ class EDFLifecycleTests(unittest.TestCase):
             self.tracker.receiveDataFile.return_value = -1
             with self.assertRaisesRegex(IOError, "recover TEST.EDF"):
                 self.controller.finish_session(Path(temp) / "test.edf")
+            self.assertEqual(self.tracker.receiveDataFile.call_count, 3)
+
+    def test_incomplete_download_retries_before_publishing(self):
+        self.controller.open_edf("RETRY.EDF")
+        attempts = []
+
+        def receive(source, target):
+            attempts.append(source)
+            self.assertFalse(Path(target).exists())
+            Path(target).write_bytes(b"edf")
+            return 10 if len(attempts) == 1 else 3
+
+        self.tracker.receiveDataFile.side_effect = receive
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "eyelink.edf"
+            self.assertTrue(self.controller.finish_session(destination))
+            self.assertEqual(destination.read_bytes(), b"edf")
+            self.assertFalse(destination.with_suffix(".partial.edf").exists())
+        self.assertEqual(attempts, ["RETRY.EDF", "RETRY.EDF"])
+
+    def test_truncated_edf_is_never_published_after_exhausted_retries(self):
+        self.controller.open_edf("SHORT.EDF")
+
+        def receive(source, target):
+            Path(target).write_bytes(b"edf")
+            return 100
+
+        self.tracker.receiveDataFile.side_effect = receive
+        with tempfile.TemporaryDirectory() as temp:
+            destination = Path(temp) / "eyelink.edf"
+            with self.assertRaisesRegex(IOError, "local file has 3 bytes"):
+                self.controller.finish_session(destination)
+            self.assertFalse(destination.exists())
+            self.assertTrue(destination.with_suffix(".partial.edf").exists())
 
 
 class KeyboardTimingTests(unittest.TestCase):

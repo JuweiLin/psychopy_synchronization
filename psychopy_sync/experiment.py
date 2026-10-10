@@ -21,7 +21,7 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
     articles = load_experiment_articles(config)
     store = SessionStore(config, participant_id, articles)
     controller = DummyEyeLinkController() if config.dummy_mode else EyeLinkController(eyelink_config or EyeLinkConfig())
-    win, log, summary = None, None, None
+    win, view, log, summary = None, None, None, None
     audio = None
     primary_error = None
     cleanup_errors = []
@@ -37,6 +37,7 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
         store.save()
         view = ReadingDisplay(win, config, controller)
         prepared = view.prepare(articles["condition1"] + articles["condition2"])
+        view.export_pages(store, articles, prepared)
         if not config.dummy_mode:
             controller.configure_display(win)
             controller.configure_calibration(win)
@@ -88,6 +89,8 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
             except Exception:
                 pass
     finally:
+        if view is not None and view.data_viewer is not None:
+            view.data_viewer.mark_interrupted()
         try:
             if audio is not None:
                 audio.stop()
@@ -99,10 +102,27 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
         except Exception as exc:
             cleanup_errors.append(f"Log save failed: {exc}")
         try:
-            if not config.dummy_mode and controller.finish_session(store.directory / "eyelink.edf"):
-                store.metadata["edf_status"] = "downloaded"
+            if not config.dummy_mode:
+                if store.metadata["edf_status"] in ("opened", "recording"):
+                    store.metadata["edf_status"] = "transferring"
+                    store.save()
+                if primary_error is None and view is not None:
+                    # Only a normal run redraws here. Failed flips may still
+                    # have pending callbacks, so do not replay them on abort.
+                    try:
+                        view.show_saving()
+                    except Exception:
+                        logging.warning("Could not show the saving screen", exc_info=True)
+                destination = store.directory / "eyelink.edf"
+                if controller.finish_session(destination):
+                    if not destination.is_file() or destination.stat().st_size == 0:
+                        raise IOError("EyeLink download produced no nonempty local EDF file")
+                    store.metadata.update(edf_status="downloaded", edf_path=str(destination.resolve()),
+                                          edf_bytes=destination.stat().st_size)
+                elif primary_error is None:
+                    raise IOError("EyeLink did not create an EDF file")
         except Exception as exc:
-            store.metadata["edf_status"] = "recovery_required"
+            store.metadata.update(edf_status="recovery_required", edf_error=str(exc))
             cleanup_errors.append(f"EDF recovery required ({store.metadata['host_edf_name']} on Host): {exc}")
         try:
             controller.close()
@@ -115,13 +135,18 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
             cleanup_errors.append(f"Window cleanup failed: {exc}")
         if cleanup_errors:
             store.metadata["cleanup_errors"] = cleanup_errors
+            if primary_error is None:
+                store.metadata["status"] = "failed"
         store.save()
         for error in cleanup_errors:
             logging.error(error)
     if primary_error is not None:
+        primary_error.session_result = dict(store.metadata, directory=str(store.directory))
         raise primary_error
     if cleanup_errors:
-        raise RuntimeError("; ".join(cleanup_errors))
+        error = RuntimeError("; ".join(cleanup_errors))
+        error.session_result = dict(store.metadata, directory=str(store.directory))
+        raise error
     return summary, store.directory
 
 

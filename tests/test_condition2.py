@@ -12,6 +12,7 @@ from psychopy_sync.audio_client import AudioFailure, CachedAudio
 from psychopy_sync.condition1 import ExperimentAborted
 from psychopy_sync.condition2 import run_condition2
 from psychopy_sync.config import ExperimentConfig
+from psychopy_sync.data_viewer import DataViewerExport
 from psychopy_sync.event_log import EventLog, SessionStore
 from psychopy_sync.reading_display import ReadingDisplay
 from psychopy_sync.reading_speed import reading_summary
@@ -26,6 +27,9 @@ def csv_rows(path):
 class Window:
     def __init__(self):
         self.now, self.callbacks = 0.0, []
+
+    def clearBuffer(self):
+        pass
 
     def callOnFlip(self, callback):
         self.callbacks.append(callback)
@@ -98,6 +102,9 @@ class Condition2Tests(unittest.TestCase):
         self.view = ReadingDisplay.__new__(ReadingDisplay)
         self.view.win, self.view.config, self.view.controller = self.win, config, self.controller
         self.view.keyboard, self.view.prompt = MagicMock(), MagicMock()
+        self.view.data_viewer = DataViewerExport(self.store)
+        for row in self.store.sentences:
+            row["screenshot_status"] = "saved"
         self.view.keyboard.getKeys.return_value = []
         self.prepared = {a.article_id: [MagicMock(name=text) for text in a.pages] for a in self.articles}
         self.playbacks = []
@@ -151,6 +158,13 @@ class Condition2Tests(unittest.TestCase):
             self.assertIn(str(playback.cached.path), start["detail"])
             self.assertGreaterEqual(float(end["timestamp_s"]), float(start["timestamp_s"]))
         self.assertTrue(all(row["condition"] == "condition2" for row in events))
+        sentence_rows = [r for r in csv_rows(self.store.directory / "sentence_pages.csv")
+                         if r["condition"] == "condition2"]
+        self.assertEqual([r["status"] for r in sentence_rows], ["completed"] * 4)
+        self.assertEqual(len([r for r in events if r["message"].startswith("TRIALID ")]), 4)
+        self.assertEqual(len([r for r in events if r["message"].startswith("!V IMGLOAD FILL ")]), 4)
+        for row, page in zip(sentence_rows, page_starts):
+            self.assertEqual(row["start_timestamp_s"], page["timestamp_s"])
         self.assertTrue(all(call.kwargs["keyList"] == ["escape"]
                             for call in self.view.keyboard.getKeys.call_args_list))
 

@@ -51,7 +51,7 @@ The service loads the model and generates a short test WAV at startup. The login
 
 - `data/users.csv`: participant IDs and first registration times.
 - `data/reading_speed.csv`: reading speed for each participant/session.
-- `data/<participant_id>/<session_id>/`: `condition1.csv`, `condition2.csv`, `user_logs.csv`, `session.json`, `stimuli/` and `eyelink.edf`.
+- `data/<participant_id>/<session_id>/`: `condition1.csv`, `condition2.csv`, `user_logs.csv`, `sentence_pages.csv`, `session.json`, `stimuli/`, `screenshots/` and `eyelink.edf`.
 - `assets/TTS/<participant_id>/<session_id>/`: `tts_index.csv`, requests, manifest and sentence WAVs inside article folders.
 - `data/launcher_logs/`: startup and experiment diagnostics.
 
@@ -65,8 +65,12 @@ With a GPU URL, the first Condition 2 article is released as soon as all its sen
 
 Hardware recording, EDF transfer, speaker output and real F5-TTS still require verification on the experiment setup.
 
+For real recording, the result window shows the downloaded EDF path and byte count. EDF transfer is attempted on normal completion and Escape, retries up to three times, and publishes the file only when the received byte count matches the local file size. A failure shows the Host EDF filename for recovery. Dummy mode never produces an EDF.
+
+Every selected sentence is captured as a full-screen PNG before calibration/recording, using the actual PsychoPy page layout (including the Condition 1 footer). `sentence_pages.csv` maps condition/article/sentence IDs to relative image paths and visible onset/offset intervals; unshown pages stay `not_presented`. Each displayed sentence is one Data Viewer trial with standard image-loading messages. Copy the complete session folder to the analysis computer and import `eyelink.edf`; then use Data Viewer's image auto-segmentation to create AOIs. The experiment does not create AOIs. See [Data Viewer output](docs/data-viewer.md).
+
 ## Details
 
-[Experiment flow and timing](docs/condition1.md) · [GPU audio service](docs/network-audio.md) · [Module map](docs/module-map.md)
+[Experiment flow and timing](docs/condition1.md) · [Data Viewer output](docs/data-viewer.md) · [GPU audio service](docs/network-audio.md) · [Module map](docs/module-map.md)
 
 For developers, hardware-free checks run with `python3 -m unittest discover -s tests -v`.
