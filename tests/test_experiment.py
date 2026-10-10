@@ -81,7 +81,7 @@ class ExperimentTests(unittest.TestCase):
             with (assets / "articles" / (article_id + ".csv")).open("w", newline="", encoding="utf-8-sig") as stream:
                 csv.writer(stream).writerows([[title], [" ".join(["word"] * count)]])
         self.config = ExperimentConfig(assets_dir=assets, output_dir=self.root / "data", condition2_count=1,
-                                       random_seed=4, dummy_mode=False)
+                                       random_seed=4, dummy_mode=False, tts_server_url=None)
         selected = load_experiment_articles(self.config)
         self.article_ids = {a.title: a.article_id for articles in selected.values() for a in articles}
         self.win, self.controller = FakeWin(), MagicMock()
@@ -177,6 +177,31 @@ class ExperimentTests(unittest.TestCase):
         self.controller.calibrate.assert_not_called()
         self.controller.finish_session.assert_not_called()
         self.assertTrue(self.win.closed)
+
+    def test_configured_audio_continues_into_condition2_before_edf_cleanup(self):
+        config = replace(self.config, tts_server_url="http://192.168.137.2:8765")
+        audio = MagicMock()
+        audio.manifest = {"status": "running"}
+
+        def present(view, articles, prepared, session_audio, log, store):
+            self.controller.finish_session.assert_not_called()
+            self.assertEqual(store.metadata["reading_speed"]["speed_per_minute"], 120)
+            self.assertEqual(session_audio, audio)
+            self.assertIn(articles[0].article_id, prepared)
+            store.rows["condition2"][0]["status"] = "completed"
+
+        with patch("psychopy_sync.experiment.SessionAudio", return_value=audio) as prepare, \
+                patch("psychopy_sync.experiment.run_condition2", side_effect=present) as run:
+            _, directory = run_experiment("S001", config)
+        prepare.assert_called_once()
+        audio.start.assert_called_once_with()
+        run.assert_called_once()
+        audio.stop.assert_called_once_with()
+        self.assertEqual(read_csv(directory / "condition2.csv")[0]["status"], "completed")
+        metadata = json.loads((directory / "session.json").read_text())
+        self.assertEqual((metadata["status"], metadata["condition2_status"]), ("completed", "completed"))
+        self.controller.start_recording.assert_called_once_with()
+        self.controller.finish_session.assert_called_once()
 
     def test_dummy_abort_keeps_partial_logs_without_speed_or_edf(self):
         config = replace(self.config, dummy_mode=True)

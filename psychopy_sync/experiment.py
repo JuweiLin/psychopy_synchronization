@@ -1,4 +1,4 @@
-"""Measure reading speed and prepare sentence audio, with optional EyeLink recording."""
+"""Measure reading speed, then present sentence text/audio with optional EyeLink."""
 
 import argparse
 import json
@@ -6,6 +6,7 @@ import logging
 
 from .articles import load_experiment_articles
 from .condition1 import ExperimentAborted, run_condition1
+from .condition2 import run_condition2
 from .config import DisplayConfig, ExperimentConfig, EyeLinkConfig
 from .display import create_window
 from .event_log import EventLog, SessionStore
@@ -35,7 +36,7 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
         store.metadata["window_size"] = [int(v) for v in win.size]
         store.save()
         view = ReadingDisplay(win, config, controller)
-        prepared = view.prepare(articles["condition1"])
+        prepared = view.prepare(articles["condition1"] + articles["condition2"])
         if not config.dummy_mode:
             controller.configure_display(win)
             controller.configure_calibration(win)
@@ -67,12 +68,20 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
         log.emit("TTS_START" if audio.worker is not None else "TTS_SKIPPED", "condition2",
                  detail=audio.manifest["status"])
         if audio.worker is not None:
-            view.wait_for_audio(audio, log)
-        # Condition 2 presentation has not started; files remain cached for later.
+            store.metadata.update(status="condition2_running", condition2_status="running")
+            store.save()
+            run_condition2(view, articles["condition2"], prepared, audio, log, store)
+            store.metadata["condition2_status"] = "completed"
+        else:
+            store.metadata["condition2_status"] = "not_configured" if articles["condition2"] else "not_required"
+            log.emit("CONDITION_SKIPPED", "condition2", detail=audio.manifest["status"])
+        store.metadata["status"] = "completed"
         log.emit("SESSION_END")
     except BaseException as exc:
         primary_error = exc
         store.metadata.update(status="aborted" if isinstance(exc, ExperimentAborted) else "failed", error=str(exc))
+        if store.metadata.get("condition2_status") == "running":
+            store.metadata["condition2_status"] = store.metadata["status"]
         if log is not None:
             try:
                 log.emit("SESSION_ABORT" if isinstance(exc, ExperimentAborted) else "SESSION_ERROR", detail=str(exc))

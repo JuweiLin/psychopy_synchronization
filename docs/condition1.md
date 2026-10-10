@@ -14,7 +14,7 @@ Double-click `Start Experiment.bat` on Windows or `Start Experiment.command` on 
 
 Set `dummy_mode=True` in the root `config.py` to use this mode. It does not require or probe `pylink` or `EyeLinkCoreGraphicsPsychoPy`, does not connect to a tracker, and skips calibration and all recording/EDF operations. It shows a dummy ready screen before Condition 1. PsychoPy and wxPython are still required for the display and login.
 
-Article selection, sentence pages, keyboard controls, flip timestamps, WPM calculation, event logs and TTS preparation run normally. `tts_server_url` still controls whether audio is generated; dummy mode does not disable the GPU service. A demo-silence server can pass the readiness check only in dummy mode; real EyeLink sessions require a verified F5-TTS server when a URL is configured.
+Article selection, sentence pages, keyboard controls, flip timestamps, WPM calculation, event logs and configured Condition 2 playback run normally. Condition 2 requires PsychoPy's PTB and soundfile dependencies even in dummy mode. `tts_server_url` still controls whether audio is generated; dummy mode does not disable the GPU service. A demo-silence server can pass the readiness check only in dummy mode; real EyeLink sessions require a verified F5-TTS server when a URL is configured.
 
 Dummy session files and global tables are stored under `data/dummy/`. Session metadata records `dummy_mode=true`, `edf_status=disabled_dummy`, an empty Host EDF filename and no EyeLink configuration. Local events use `marker_status=disabled_dummy`, not `sent`. No synthetic eye data or EDF is created. The TTS manifest also records the mode.
 
@@ -31,22 +31,24 @@ At startup, the code randomly selects `condition1_count + condition2_count` dist
 ## Session sequence
 
 1. Create a new session under the participant ID, register the ID if needed, and save article selection and both conditions' stimulus snapshots.
-2. Connect to EyeLink, open the PsychoPy window and prepare the Condition 1 pages. Oversized pages fail validation rather than being split.
+2. Connect to EyeLink, open the PsychoPy window and prepare the pages for both conditions. Oversized pages fail validation rather than being split.
 3. Configure and run EyeLink calibration. The default is HV9 with automatic calibration start and 1000 ms pacing.
 4. Open the Host EDF and start one continuous recording. Calibration itself is outside this EDF recording.
 5. Show the operator confirmation screen. Verify calibration/validation on the Host before pressing Space.
 6. Run Condition 1. Space starts an article, advances each sentence/page and ends the last page. Each article has a separate start prompt.
 7. After every Condition 1 article is completed, compute and save reading speed.
-8. Create the participant/session TTS directory and prepare one request per selected Condition 2 sentence. With a configured service, wait for generation, download and verification while EyeLink continues recording.
-9. End this phase, stop recording, close and download the EDF in real mode, and close the experiment window. The login window returns with the reading speed and data directory.
+8. Create the participant/session TTS directory and submit every selected Condition 2 sentence in background HTTP batches of at most 100. GPU generation is queued in article/sentence order.
+9. Wait only for the next article's complete set of verified local WAVs, then preload them on the main thread. Press Space to begin the article. Display each CSV sentence, schedule its corresponding WAV using PTB, and automatically advance after audio completion. Later articles continue generating/downloading in the background. Repeat for each Condition 2 article.
+10. Stop recording after both conditions, close and download the EDF in real mode, and close the experiment window. The login window returns with the reading speed and data directory.
 
-Condition 2 text presentation and audio playback have not started at step 8; its article rows remain `not_presented`.
+With no service URL, Condition 2 is explicitly skipped, its article rows remain `not_presented`, and requests/index files are saved as `not_configured`.
 
 ## Timing and messages
 
 - `ARTICLE_ONSET`: bound to the flip that displays the first page.
 - `PAGE_ONSET`: bound to each subsequent page's first flip.
 - `ARTICLE_END`: bound to the flip that removes the last page.
+- Condition 2 also logs every `PAGE_ONSET` and `PAGE_END`, plus `AUDIO_START`, `AUDIO_END` and interrupted playback (`AUDIO_ABORT`). `AUDIO_START` records the display flip and requested PTB start time, job ID and WAV path. `AUDIO_END` records when the main loop observes PTB completion. These are software playback events, not measured acoustic onset/offset. Verify physical audiovisual timing on the experiment hardware; see [PsychoPy scheduling](https://psychopy.org/api/sound/playback.html#preschedule-your-sound).
 
 Each marker includes a local event ID, condition, article ID, page and display timestamp. The same event is stored in `user_logs.csv` and sent to EyeLink. The Host stores its own message reception timestamp; online reading speed uses the display flip timestamps, not subtraction of Host reception times.
 
@@ -56,9 +58,9 @@ total_reading_s = sum(article_reading_s)
 WPM = 60 * total_word_count / total_reading_s
 ```
 
-English words are counted using whitespace-separated tokens. Article intervals include within-article page transitions and exclude waits between articles. The final speed uses total words divided by total effective time, not the mean of individual article speeds.
+English words are counted using whitespace-separated tokens. Article intervals include within-article page transitions and exclude waits between articles. Condition 2 article intervals are also saved in `reading_duration_s`, but never contribute to the measured Condition 1 WPM. The final speed uses total words divided by total effective time, not the mean of individual article speeds.
 
-Eye samples, including gaze and pupil area, are stored in EDF. `user_logs.csv` contains events, not individual eye samples. Continuous recording includes the confirmation screen, article waits, reading and configured TTS preparation. Holding Space across screens does not automatically advance the next screen.
+Eye samples, including gaze and pupil area, are stored in EDF. `user_logs.csv` contains events, not individual eye samples. Continuous recording includes the confirmation screen, article waits, reading, configured TTS preparation and Condition 2 playback. Holding Space across screens does not automatically advance the next screen.
 
 ## Output and identity
 
@@ -69,7 +71,7 @@ Only participant ID is collected. `users.csv` contains `participant_id` and `cre
 | `data/users.csv` | Participant registry |
 | `data/reading_speed.csv` | Participant/session reading speed and totals |
 | `data/<id>/<session>/condition1.csv` | Selected articles, order, status, event IDs, timestamps and durations |
-| `data/<id>/<session>/condition2.csv` | Selected articles and aggregate audio preparation state |
+| `data/<id>/<session>/condition2.csv` | Selected articles, presentation timing/status and aggregate audio preparation state |
 | `data/<id>/<session>/user_logs.csv` | Timestamped session, condition, article, page and audio events |
 | `data/<id>/<session>/eyelink.edf` | Continuous eye samples and messages |
 | `data/<id>/<session>/session.json` | Configuration, sampling seed, selections, session/EDF state and TTS location |
@@ -93,11 +95,11 @@ A nonempty CSV sentence/page corresponds to one WAV. Numbering starts at 1 and m
 
 The sentence index contains participant/session/article IDs, sentence index, source CSV record number, exact sentence text, word count, target WPM/duration, audio status, actual WAV path, planned WAV path, job ID, actual duration/WPM, checksum and error. `audio_path` stays empty until a WAV is successfully downloaded and verified. `planned_audio_path` does not assert file existence.
 
-Without a service URL, requests, manifest and index are saved as `not_configured`; no placeholder WAV is produced. With a URL, HTTP requests run in a background thread. Each verified sentence is saved individually, and batches are limited to 100 requests per HTTP call. A failed sentence does not prevent other sentences from finishing. An article becomes `cached` only after all its sentences are cached. Its `audio_index_path` links the sentence table; individual job IDs live there.
+Without a service URL, requests, manifest and index are saved as `not_configured`; no placeholder WAV is produced. With a URL, HTTP requests run in a background thread. All batches are submitted before waiting on jobs; downloaded audio events are saved at article boundaries and during wait screens so file writes do not interrupt sentence display. Each verified sentence is saved individually, and batches are limited to 100 requests per HTTP call. A failed sentence does not prevent other sentences from finishing. An article becomes `cached` only after all its sentences are cached. The display waits for each article separately; ready first-article audio does not wait on later articles. Its `audio_index_path` links the sentence table; individual job IDs live there.
 
 ## Exit and recovery
 
-Escape or an exception triggers cleanup and data saving, with an attempted EDF download in real mode. A partially completed Condition 1 does not publish a complete reading speed or start TTS. Exiting during TTS preserves saved speed and cached files; it stops further local polling/downloads but does not cancel jobs already accepted by the GPU.
+Escape or an exception triggers cleanup and data saving, with an attempted EDF download in real mode. A partially completed Condition 1 does not publish a complete reading speed or start TTS. Exiting during TTS or Condition 2 playback preserves saved speed, cached files and partial presentation logs; active audio is stopped. It stops further local polling/downloads but does not cancel jobs already accepted by the GPU.
 
 EDF transfer first writes `.partial.edf` and publishes `eyelink.edf` only after success. Transfer failure records `edf_status=recovery_required` and the Host EDF filename for manual recovery. Forced termination or power loss can lose locally buffered events; inspect the Host recording for recovery.
 

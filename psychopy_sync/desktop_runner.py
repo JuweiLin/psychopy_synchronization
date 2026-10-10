@@ -18,7 +18,8 @@ def execute(participant_id, result_path, runner=None):
         summary, directory = runner(participant_id)
         metadata = json.loads((Path(directory) / "session.json").read_text(encoding="utf-8"))
         result = dict(status="completed", summary=summary, directory=str(directory),
-                      tts_status=metadata.get("tts_status"), dummy_mode=metadata.get("dummy_mode", False))
+                      tts_status=metadata.get("tts_status"), condition2_status=metadata.get("condition2_status"),
+                      dummy_mode=metadata.get("dummy_mode", False))
         code = 0
     except (ExperimentAborted, KeyboardInterrupt):
         result = dict(status="aborted")

@@ -2,7 +2,7 @@
 
 After Condition 1 saves personal WPM, the display computer sends one request per selected Condition 2 sentence to the GPU service. The service generates and validates a complete WAV before publishing it. The display computer polls and downloads in a background thread, then verifies identity, checksum, file size, PCM readability and duration before caching the sentence.
 
-The experiment's local files are `assets/TTS/<participant_id>/<session_id>/<article_id>/sentence_0001.wav`, with one JSON metadata file per WAV and a `tts_index.csv` mapping every sentence to its audio location. With `tts_server_url=""` in the root `config.py`, only requests and the index/manifest are saved. Condition 2 playback is not implemented.
+The experiment's local files are `assets/TTS/<participant_id>/<session_id>/<article_id>/sentence_0001.wav`, with one JSON metadata file per WAV and a `tts_index.csv` mapping every sentence to its audio location. With `tts_server_url=""` in the root `config.py`, only requests and the index/manifest are saved. With a configured server, Condition 2 starts after the first article's entire set of WAVs is verified and preloaded. Each sentence displays with its corresponding WAV and advances automatically after playback. Later articles generate/download in the background; waiting is per article, not for the whole condition.
 
 ## Start the GPU service
 
@@ -143,4 +143,4 @@ python -m psychopy_sync.audio_client \
   --cache-dir audio_cache
 ```
 
-Demo mode produces explicitly marked silence, which the formal sound preload helper rejects. It is not experimental speech. Integration tests use temporary local HTTP services for sentence identity, indexing, batching, publication, checksum validation, failure handling and restart recovery.
+Demo mode produces explicitly marked silence, which the formal sound preload helper rejects unless dummy mode is explicitly enabled. It is not experimental speech. Integration tests use temporary local HTTP services for sentence identity, indexing, batching, publication, checksum validation, failure handling and restart recovery.

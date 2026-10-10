@@ -29,7 +29,9 @@ def result_message(result):
         if result.get("dummy_mode"):
             text += "\nDummy mode: no eye tracking was recorded."
         if result.get("tts_status") == "not_configured":
-            text += "\nTTS server not configured. Sentence index and requests saved."
+            text += "\nCondition 2 skipped: TTS server not configured. Sentence index and requests saved."
+        elif result.get("condition2_status") == "completed":
+            text += "\nCondition 2 completed. Sentence audio and playback logs saved."
         elif result.get("tts_status") == "cached":
             text += "\nCondition 2 sentence audio saved."
         return "Session complete", text
@@ -161,7 +163,7 @@ def main():
                 self.error.SetLabel("Missing components: " + ", ".join(missing))
                 self.error.Wrap(476)
                 self.status_title.SetLabel("Setup required")
-                self.status.SetLabel("Install the missing PsychoPy / EyeLink components, then try again.")
+                self.status.SetLabel("Install the missing PsychoPy / audio / EyeLink components, then try again.")
                 self.Layout()
                 return
             # Recheck before each session, even if the initial launch check passed.

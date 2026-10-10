@@ -76,7 +76,7 @@ class LauncherTests(unittest.TestCase):
             subprocess.CompletedProcess([], 0, json.dumps(partial)),
             subprocess.CompletedProcess([], 0, json.dumps(complete)),
         ]) as run:
-            self.assertIs(find_runtime([first, second], config=ExperimentConfig(dummy_mode=False)), second)
+            self.assertIs(find_runtime([first, second], config=ExperimentConfig(dummy_mode=False, tts_server_url=None)), second)
         self.assertEqual(run.call_args.kwargs["env"], second.environment)
 
     def test_runtime_selection_can_show_login_with_missing_eyelink_dependencies(self):
@@ -89,9 +89,9 @@ class LauncherTests(unittest.TestCase):
                                        config=ExperimentConfig(dummy_mode=False)), runtime)
 
     def test_dummy_runtime_and_preflight_do_not_probe_eyelink_packages(self):
-        config = ExperimentConfig(dummy_mode=True)
+        config = ExperimentConfig(dummy_mode=True, tts_server_url=None)
         self.assertEqual(required_modules(config), ("psychopy", "wx"))
-        self.assertEqual(required_modules(ExperimentConfig(dummy_mode=False)),
+        self.assertEqual(required_modules(ExperimentConfig(dummy_mode=False, tts_server_url=None)),
                          ("psychopy", "wx", "pylink", "EyeLinkCoreGraphicsPsychoPy"))
         runtime = Runtime(Path("/python"), {})
         with patch("psychopy_sync.launcher_bootstrap.subprocess.run", return_value=
@@ -99,6 +99,14 @@ class LauncherTests(unittest.TestCase):
             self.assertIs(find_runtime([runtime], config=config), runtime)
         self.assertNotIn("pylink", run.call_args.args[0][2])
         self.assertNotIn("EyeLinkCoreGraphicsPsychoPy", run.call_args.args[0][2])
+
+    def test_condition2_preflight_requires_ptb_audio_even_in_dummy_mode(self):
+        for dummy in (True, False):
+            config = ExperimentConfig(dummy_mode=dummy, condition2_count=1, tts_server_url="http://127.0.0.1:8765")
+            self.assertIn("psychtoolbox", required_modules(config))
+            self.assertIn("soundfile", required_modules(config))
+        self.assertNotIn("psychtoolbox", required_modules(
+            ExperimentConfig(dummy_mode=True, condition2_count=0, tts_server_url="http://127.0.0.1:8765")))
 
     def test_dummy_result_identifies_the_session_as_untracked(self):
         title, message = result_message(dict(status="completed", dummy_mode=True,

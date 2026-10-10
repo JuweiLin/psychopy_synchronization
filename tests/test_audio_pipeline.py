@@ -109,6 +109,19 @@ class AudioPipelineTests(unittest.TestCase):
         self.assertEqual(metadata["status"], "available")
         self.assertTrue(client.download_audio(article(), job_id, metadata).path.is_file())
 
+    def test_preload_checks_integrity_then_uses_ptb_and_the_shared_speaker(self):
+        _, _, client = self.serve()
+        request = article()
+        job_id = client.submit_articles([request])[0]["job_id"]
+        cached = client.download_audio(request, job_id, self.wait_terminal(client, job_id))
+        sound, speaker = MagicMock(), MagicMock()
+        with patch.dict("sys.modules", {"psychopy.sound.backend_ptb": types.SimpleNamespace(SoundPTB=sound)}):
+            self.assertIs(preload_article_audio(cached, allow_demo=True, speaker=speaker), sound.return_value)
+        sound.assert_called_once_with(str(cached.path), preBuffer=-1, autoLog=False, speaker=speaker)
+        cached.path.write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "changed after download"):
+            preload_article_audio(cached, allow_demo=True)
+
     def test_failed_generation_reports_error_and_next_article_still_completes(self):
         class SometimesBroken(DemoGenerator):
             def generate(self, request, output_path):
@@ -252,6 +265,45 @@ class AudioPipelineTests(unittest.TestCase):
         self.assertEqual(store.metadata["reading_speed"]["speed_per_minute"], 120)
         self.assertEqual(list(batch.directory.rglob("*.wav")), [])
 
+    def test_first_article_is_released_while_later_article_is_still_generating(self):
+        class LaterArticle(DemoGenerator):
+            blocked_article = None
+
+            def __init__(self):
+                self.entered, self.release = threading.Event(), threading.Event()
+
+            def generate(self, request, output_path):
+                if request.article_id == self.blocked_article:
+                    self.entered.set()
+                    if not self.release.wait(3.0):
+                        raise RuntimeError("Later article timed out")
+                return super().generate(request, output_path)
+
+        generator = LaterArticle()
+        _, server, _ = self.serve(generator)
+        self.addCleanup(generator.release.set)
+        config, store, articles, summary = self.session_batch(server)
+        first, second = articles["condition2"]
+        generator.blocked_article = second.article_id
+        batch = SessionAudio(config, store, articles["condition2"], summary)
+        self.addCleanup(batch.stop)
+        batch.start()
+        self.assertTrue(generator.entered.wait(1.0))
+        deadline = time.monotonic() + 2.0
+        while not batch.article_ready(first.article_id) and time.monotonic() < deadline:
+            batch.poll()
+            time.sleep(0.005)
+        self.assertTrue(batch.article_ready(first.article_id))
+        self.assertFalse(batch.done)
+        self.assertFalse(batch.article_ready(second.article_id))
+        cached = batch.cached_article(first.article_id)
+        self.assertEqual([c.request.text for c in cached], list(first.pages))
+        self.assertEqual([c.request.sentence_index for c in cached], [1, 2, 3])
+        self.assertTrue(all(c.path.is_file() for c in cached))
+        with self.assertRaisesRegex(RuntimeError, "not ready"):
+            batch.cached_article(second.article_id)
+        generator.release.set()
+
     def test_tts_requires_completed_condition1_and_keeps_participants_separate(self):
         _, server, _ = self.serve()
         config, store, articles, summary = self.session_batch(server)
@@ -321,7 +373,13 @@ class AudioPipelineTests(unittest.TestCase):
         self.addCleanup(lambda: worker.stop(timeout=1.0))
         requests = [GenerationRequest("session", "participant", "A", "Word.", 600, 1, sentence_index=i)
                     for i in range(1, 102)]
-        with patch.object(client, "submit_articles", wraps=client.submit_articles) as submit:
+        def check_all_submitted(job_id):
+            self.assertEqual(submit.call_count, 2)
+            return original_status(job_id)
+
+        original_status = client.get_status
+        with patch.object(client, "submit_articles", wraps=client.submit_articles) as submit, \
+                patch.object(client, "get_status", side_effect=check_all_submitted):
             worker.start(requests)
             results = [worker.events.get(timeout=3.0) for _ in requests]
         self.assertEqual([len(call.args[0]) for call in submit.call_args_list], [100, 1])

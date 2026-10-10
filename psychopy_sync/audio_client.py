@@ -172,21 +172,22 @@ class BackgroundAudioClient:
     def _run(self, articles):
         # The service accepts at most 100 requests in one HTTP batch. Sentence
         # requests can exceed this even for a small selection of articles.
+        # Queue every batch before waiting on generation so later articles can
+        # generate while the first article is displayed on the experiment PC.
+        submitted = []
         for offset in range(0, len(articles), 100):
             if self._stop.is_set():
                 return
-            self._run_batch(articles[offset:offset + 100])
-
-    def _run_batch(self, articles):
-        if self._stop.is_set():
-            return
-        try:
-            jobs = self.client.submit_articles(articles)
-        except Exception as exc:
-            for request in articles:
-                self.events.put(AudioFailure(request, "", str(exc)))
-            return
-        for request, job in zip(articles, jobs):
+            batch = articles[offset:offset + 100]
+            try:
+                jobs = self.client.submit_articles(batch)
+                submitted.extend(zip(batch, jobs))
+            except Exception as exc:
+                for request in batch:
+                    self.events.put(AudioFailure(request, "", str(exc)))
+        for request, job in submitted:
+            if self._stop.is_set():
+                return
             job_id = job["job_id"]
             try:
                 while not self._stop.is_set():

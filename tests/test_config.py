@@ -28,7 +28,7 @@ class UserConfigTests(unittest.TestCase):
             'tts_server_url = "http://192.168.1.20:8765"\n')
         config = module["ExperimentConfig"]()
         self.assertEqual(required_modules(config),
-                         ("psychopy", "wx", "pylink", "EyeLinkCoreGraphicsPsychoPy"))
+                         ("psychopy", "wx", "psychtoolbox", "soundfile", "pylink", "EyeLinkCoreGraphicsPsychoPy"))
         self.assertEqual((config.condition1_count, config.condition2_count), (3, 5))
         self.assertEqual(module["EyeLinkConfig"]().ip, "100.1.1.2")
         self.assertEqual(config.tts_server_url, "http://192.168.1.20:8765")

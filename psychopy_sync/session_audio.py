@@ -30,6 +30,7 @@ class SessionAudio:
         self.directory.mkdir(parents=True, exist_ok=False)
         self.index_path = self.directory / "tts_index.csv"
         self.worker = None
+        self.cached = {}
         self.rows = {row["article_id"]: row for row in store.rows["condition2"]}
         self.requests, sentences = [], []
         for article in articles:
@@ -79,10 +80,10 @@ class SessionAudio:
         row = self.rows[article_id]
         if states == {"cached"}:
             row.update(audio_status="cached", audio_path=str(self.directory / article_id))
-        elif "pending" in states:
-            row["audio_status"] = "pending"
         elif "failed" in states:
             row["audio_status"] = "failed"
+        elif "pending" in states:
+            row["audio_status"] = "pending"
         elif "stopped" in states:
             row["audio_status"] = "stopped"
         else:
@@ -120,6 +121,20 @@ class SessionAudio:
     def failed(self):
         return self.manifest["status"] == "failed"
 
+    def article_ready(self, article_id):
+        entries = [entry for key, entry in self.entries.items() if key[0] == article_id]
+        return bool(entries) and all(entry["audio_status"] == "cached" for entry in entries)
+
+    def article_error(self, article_id):
+        return self.rows[article_id]["audio_error"]
+
+    def cached_article(self, article_id):
+        """Return verified sentence audio in CSV order, never a partial article."""
+        if not self.article_ready(article_id):
+            raise RuntimeError(f"Audio for article {article_id} is not ready")
+        return [self.cached[(request.article_id, request.sentence_index)]
+                for request in self.requests if request.article_id == article_id]
+
     def poll(self, log=None):
         if self.worker is None:
             return []
@@ -129,6 +144,7 @@ class SessionAudio:
             entry = self.entries[(article_id, index)]
             entry["job_id"] = event.job_id
             if isinstance(event, CachedAudio):
+                self.cached[(article_id, index)] = event
                 entry.update(audio_status="cached", path=str(event.path), metadata=event.metadata)
                 self._write_json(event.path.with_suffix(".json"), event.metadata)
                 event_name, detail = "AUDIO_CACHED", str(event.path)

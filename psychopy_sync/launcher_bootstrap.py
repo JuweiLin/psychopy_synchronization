@@ -12,6 +12,8 @@ from .config import ExperimentConfig, PROJECT_ROOT
 def required_modules(config=None):
     config = config or ExperimentConfig()
     display = ("psychopy", "wx")
+    if config.tts_server_url and config.condition2_count:
+        display += ("psychtoolbox", "soundfile")
     return display if config.dummy_mode else display + ("pylink", "EyeLinkCoreGraphicsPsychoPy")
 
 

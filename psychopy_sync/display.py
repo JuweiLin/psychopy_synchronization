@@ -41,18 +41,21 @@ def show_test_target(win, duration_s: float = 2.0):
     win.flip()
 
 
-def preload_article_audio(cached_audio):
+def preload_article_audio(cached_audio, allow_demo=False, speaker=None):
     """Load a verified local file on the main thread before releasing its article.
 
-    Configure the PsychoPy audio backend before importing psychopy.sound.
-    Returns a Sound; the experiment still controls the scheduled play time.
+    Use PTB explicitly so the stimulus can be scheduled against a display flip.
+    Demo silence is allowed only when the caller explicitly selects dummy mode.
     """
     from shared.contracts import sha256_file
 
-    if cached_audio.metadata.get("generation", {}).get("demo_only"):
+    if cached_audio.metadata.get("generation", {}).get("demo_only") and not allow_demo:
         raise ValueError("Demo silence cannot be used as an experimental stimulus")
     if sha256_file(cached_audio.path) != cached_audio.metadata["audio_sha256"]:
         raise ValueError("Cached audio changed after download")
-    from psychopy import sound
+    from psychopy.sound.backend_ptb import SoundPTB
 
-    return sound.Sound(str(cached_audio.path), preBuffer=-1)
+    options = dict(preBuffer=-1, autoLog=False)
+    if speaker is not None:
+        options["speaker"] = speaker
+    return SoundPTB(str(cached_audio.path), **options)

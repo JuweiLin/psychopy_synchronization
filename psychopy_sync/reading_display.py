@@ -67,10 +67,10 @@ class ReadingDisplay:
             draw()
             self.win.flip()
 
-    def wait_screen(self, text, log, event="WAIT", article_id=""):
+    def wait_screen(self, text, log, event="WAIT", article_id="", condition="condition1"):
         self.prompt.text = text
         self._wait(self.prompt.draw, lambda: log.on_flip(
-            self.win, {}, event, condition="condition1", article_id=article_id))
+            self.win, {}, event, condition=condition, article_id=article_id))
         log.flush()
 
     def read_page(self, page, log, onset, event, article_id, page_index):
@@ -81,22 +81,69 @@ class ReadingDisplay:
         self._wait(draw, lambda: log.on_flip(self.win, onset, event, condition="condition1",
                                             article_id=article_id, page=page_index))
 
-    def clear_article(self, log, end, event, article_id):
-        log.on_flip(self.win, end, event, condition="condition1", article_id=article_id)
+    def clear_article(self, log, end, event, article_id, condition="condition1", page=None):
+        if page is not None:
+            log.on_flip(self.win, {}, "PAGE_END", condition=condition, article_id=article_id, page=page)
+        log.on_flip(self.win, end, event, condition=condition, article_id=article_id)
         self.win.flip()
 
-    def wait_for_audio(self, batch, log):
+    def wait_for_audio(self, batch, log, article_id):
+        """Release this article as soon as its sentences are verified locally."""
         self.keyboard.clearEvents()
-        log.emit("AUDIO_WAIT", "condition2")
+        log.emit("AUDIO_WAIT", "condition2", article_id)
         log.flush()
-        self.prompt.text = "Condition 1 complete.\n\nPreparing audio. Please wait."
-        while not batch.done:
+        self.prompt.text = "Condition 2\n\nPreparing audio. Please wait."
+        while True:
             self.controller.check_recording()
             keys = self.keyboard.getKeys(keyList=[self.config.quit_key], waitRelease=False, clear=True)
             if keys:
                 raise ExperimentAborted("Escape pressed during audio preparation")
             batch.poll(log)
+            error = batch.article_error(article_id)
+            if error:
+                raise RuntimeError(f"TTS failed for article {article_id}: {error}")
+            if batch.article_ready(article_id):
+                return
+            if batch.done:
+                raise RuntimeError(f"Audio for article {article_id} is unavailable ({batch.manifest['status']})")
             self.prompt.draw()
             self.win.flip()
-        if batch.failed:
-            raise RuntimeError("TTS generation/download failed; see audio_error and the TTS manifest")
+
+    def play_page(self, page, playback, cached, log, onset, article_id, page_index):
+        """Schedule a preloaded sentence on its first flip; wait for PTB EOS."""
+        self.keyboard.clearEvents()
+        self.controller.check_recording()
+        page.draw()
+        scheduled = self.win.getFutureFlipTime(clock="ptb")
+        detail = f"scheduled_ptb_s={scheduled:.9f}; job_id={cached.job_id}; path={cached.path}"
+        try:
+            playback.play(when=scheduled)
+            if page_index > 1:
+                log.on_flip(self.win, {}, "PAGE_END", condition="condition2", article_id=article_id, page=page_index - 1)
+            else:
+                log.on_flip(self.win, onset, "ARTICLE_ONSET", condition="condition2", article_id=article_id, page=1)
+            log.on_flip(self.win, {}, "PAGE_ONSET", condition="condition2", article_id=article_id, page=page_index)
+            log.on_flip(self.win, {}, "AUDIO_START", condition="condition2", article_id=article_id,
+                        page=page_index, detail=detail)
+            self.win.flip()
+            deadline = log.clock() + cached.metadata["duration_s"] + 10.0
+            while True:
+                self.controller.check_recording()
+                if self.keyboard.getKeys(keyList=[self.config.quit_key], waitRelease=False, clear=True):
+                    raise ExperimentAborted("Escape pressed during Condition 2 playback")
+                if playback.isFinished:
+                    log.emit("AUDIO_END", "condition2", article_id, page=page_index,
+                             detail=f"PTB completion observed; job_id={cached.job_id}")
+                    return
+                if log.clock() > deadline:
+                    raise RuntimeError(f"Audio playback timed out for article {article_id}, sentence {page_index}")
+                page.draw()
+                self.win.flip()
+        except BaseException:
+            try:
+                log.emit("AUDIO_ABORT", "condition2", article_id, page=page_index, detail=detail)
+            except Exception:
+                pass  # Keep the original playback/recording failure.
+            raise
+        finally:
+            playback.stop()
