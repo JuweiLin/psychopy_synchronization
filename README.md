@@ -15,6 +15,8 @@ Select **Dummy mode (no EyeLink)** in the login window to skip calibration and e
 
 The launcher looks for a project `.venv` / `venv` and an installed PsychoPy application. Dummy mode requires PsychoPy and wxPython; configured Condition 2 playback also requires PsychoPy's PTB (`psychtoolbox`) and `soundfile` audio dependencies. Real recording also requires SR Research PyLink (`pylink`) and `EyeLinkCoreGraphicsPsychoPy`. Missing components are shown before the experiment starts. Windows discovery checks common PsychoPy installation folders under Program Files and Local AppData/Programs. If automatic launch fails, a file chooser lets you select `python.exe` inside the PsychoPy installation folder. This choice is saved under `data/launcher_logs/windows-python.txt` for future launches. If PsychoPy is not installed, install PsychoPy Standalone first. Opening the `.py` file directly depends on Windows file associations; use the `.bat` entry. The Windows chooser has not been tested on a Windows computer yet.
 
+PsychoPy-managed packages are loaded in the runtime check, login and experiment processes. On Windows the launcher uses `%APPDATA%/psychopy3/packages/PythonXY/site-packages`, where `XY` matches the selected interpreter (for example, `Python310` for Python 3.10). If **Missing components** still appears, the scrollable status box shows the missing module names, the actual Python executable/version and the searched package directories. Copy that text when reporting the error; packages installed for another Python version are not reused.
+
 ## Configure
 
 Edit only [config.py](config.py) in the project root before launching. It contains four settings:

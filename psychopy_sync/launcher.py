@@ -14,6 +14,7 @@ import uuid
 from .config import ExperimentConfig, PROJECT_ROOT
 from .event_log import validate_participant_id
 from .launcher_bootstrap import required_modules
+from .package_paths import add_psychopy_packages, psychopy_package_paths
 from .server_check import check_gpu_server
 
 
@@ -208,12 +209,23 @@ def main():
                 self.error.SetLabel("Enter 1–32 letters, numbers, underscores or hyphens.")
                 self.participant.SetFocus()
                 return
+            # Also refresh discovery if packages were installed while the
+            # login window was open. This never imports the EyeLink SDK.
+            add_psychopy_packages()
             missing = [name for name in required_modules(self.config) if importlib.util.find_spec(name) is None]
             if missing:
                 self.error.SetLabel("Missing components: " + ", ".join(missing))
                 self.error.Wrap(476)
                 self.status_title.SetLabel("Setup required")
-                self.status.SetValue("Install the missing PsychoPy / audio / EyeLink components, then try again.")
+                paths = "\n".join(f"{path} ({'found' if path.is_dir() else 'not found'})"
+                                  for path in psychopy_package_paths())
+                self.status.SetValue(
+                    "Missing components: " + ", ".join(missing)
+                    + f"\n\nPython: {sys.executable}\nVersion: {sys.version.split()[0]}"
+                    + "\n\nPsychoPy package directories:\n" + paths
+                    + "\n\nInstall the missing components for this Python interpreter, then reopen the launcher.")
+                self.status.SetInsertionPoint(0)
+                self.panel.Layout()
                 self.Layout()
                 return
             # Recheck before each session, even if the initial launch check passed.

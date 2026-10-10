@@ -69,7 +69,9 @@ def runtime_candidates(project_root=PROJECT_ROOT):
 
 def find_runtime(candidates=None, config=None):
     modules = required_modules(config)
-    probe = ("import importlib.util, json; "
+    # Import the package inside the candidate interpreter so its own Python
+    # version selects the matching PsychoPy plugin directory.
+    probe = ("import psychopy_sync; import importlib.util, json; "
              f"print(json.dumps({{name: importlib.util.find_spec(name) is not None for name in {modules!r}}}))")
     fallback = None
     for candidate in runtime_candidates() if candidates is None else candidates:
