@@ -1,6 +1,7 @@
 """Participant ID login and session results in a native desktop window."""
 
 from datetime import datetime
+from dataclasses import replace
 import importlib.util
 import json
 from pathlib import Path
@@ -16,10 +17,13 @@ from .launcher_bootstrap import required_modules
 from .server_check import check_gpu_server
 
 
-def experiment_command(participant_id, result_path):
+def experiment_command(participant_id, result_path, dummy_mode=None):
     validate_participant_id(participant_id)
-    return [sys.executable, "-m", "psychopy_sync.desktop_runner", "--participant-id",
-            participant_id, "--result-file", str(result_path)]
+    command = [sys.executable, "-m", "psychopy_sync.desktop_runner", "--participant-id",
+               participant_id, "--result-file", str(result_path)]
+    if dummy_mode is not None:
+        command.append("--dummy-mode" if dummy_mode else "--eyelink-mode")
+    return command
 
 
 def result_message(result):
@@ -67,6 +71,7 @@ def main():
             self.process = self.temporary = self.log_stream = None
             self.config = ExperimentConfig()
             self.server_result = None
+            self.server_check_generation = 0
             self.server_check_in_progress = self.closing = False
             self.pending_participant = self.retry_call = None
             self.log_path = None
@@ -94,10 +99,15 @@ def main():
             layout.Add(self.participant, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 32)
             layout.AddSpacer(10)
             layout.Add(label("1–32 letters, numbers, _ or -", 11, "#63708A"), 0, wx.LEFT, 32)
+            layout.AddSpacer(16)
+            self.dummy_toggle = wx.CheckBox(panel, label="Dummy mode (no EyeLink)")
+            self.dummy_toggle.SetValue(self.config.dummy_mode)
+            self.dummy_toggle.Bind(wx.EVT_CHECKBOX, self.change_mode)
+            layout.Add(self.dummy_toggle, 0, wx.LEFT | wx.RIGHT, 32)
             self.error = label("", 11, "#B42318")
             layout.AddSpacer(10)
             layout.Add(self.error, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 32)
-            self.start_button = wx.Button(panel, label="Start Experiment", size=(-1, 40))
+            self.start_button = wx.Button(panel, label="Start Dummy Session" if self.config.dummy_mode else "Start Experiment", size=(-1, 40))
             self.start_button.SetDefault()
             self.start_button.Disable()
             self.start_button.Bind(wx.EVT_BUTTON, self.start)
@@ -128,6 +138,23 @@ def main():
             self.participant.SetFocus()
             wx.CallAfter(self.check_server)
 
+        def change_mode(self, event):
+            if self.process is not None:
+                return
+            self.config = replace(self.config, dummy_mode=self.dummy_toggle.GetValue())
+            self.error.SetLabel("")
+            self.status_title.SetLabel("Dummy mode — no eye tracking" if self.config.dummy_mode else "EyeLink recording mode")
+            self.status.SetValue("EyeLink calibration and recording will be skipped." if self.config.dummy_mode else
+                                 "EyeLink calibration and continuous recording are enabled.")
+            self.start_button.SetLabel("Start Dummy Session" if self.config.dummy_mode else "Start Experiment")
+            # Invalidate a pending launch/check from the previous mode. A demo
+            # readiness result must never authorize a real EyeLink session.
+            self.server_check_generation += 1
+            self.server_result = None
+            self.server_check_in_progress = False
+            self.pending_participant = None
+            self.check_server()
+
         def check_server(self, participant_id=None):
             if self.closing or self.process is not None or self.server_check_in_progress:
                 return
@@ -135,6 +162,9 @@ def main():
                 self.retry_call.Stop()
                 self.retry_call = None
             self.server_check_in_progress = True
+            self.server_check_generation += 1
+            generation = self.server_check_generation
+            config = self.config
             self.pending_participant = participant_id
             self.start_button.Disable()
             self.gpu_check_button.Disable()
@@ -144,14 +174,14 @@ def main():
             self.Layout()
 
             def worker():
-                result = check_gpu_server(self.config.tts_server_url, allow_demo=self.config.dummy_mode)
+                result = check_gpu_server(config.tts_server_url, allow_demo=config.dummy_mode)
                 if not self.closing:
-                    wx.CallAfter(self.server_checked, result)
+                    wx.CallAfter(self.server_checked, result, generation)
 
             threading.Thread(target=worker, name="gpu-readiness-check", daemon=True).start()
 
-        def server_checked(self, result):
-            if self.closing:
+        def server_checked(self, result, generation):
+            if self.closing or generation != self.server_check_generation:
                 return
             self.server_check_in_progress = False
             self.server_result = result
@@ -198,7 +228,8 @@ def main():
                 stamp = datetime.now().strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]
                 self.log_path = logs / f"{stamp}.log"
                 self.log_stream = self.log_path.open("w", encoding="utf-8")
-                self.process = subprocess.Popen(experiment_command(participant_id, self.result_path),
+                self.process = subprocess.Popen(experiment_command(participant_id, self.result_path,
+                                                                   dummy_mode=self.config.dummy_mode),
                                                 cwd=PROJECT_ROOT, stdin=subprocess.DEVNULL,
                                                 stdout=self.log_stream, stderr=subprocess.STDOUT)
             except Exception as exc:
@@ -210,6 +241,7 @@ def main():
             self.participant.SetValue(participant_id)
             self.start_button.Disable()
             self.participant.Disable()
+            self.dummy_toggle.Disable()
             self.gpu_check_button.Disable()
             self.status_title.SetLabel("Session in progress")
             self.status.SetValue("Continue in the experiment window. Press Escape to stop.")
@@ -234,10 +266,11 @@ def main():
             self.status_title.SetLabel(title)
             self.status.SetValue(message)
             self.status.SetInsertionPoint(0)
-            self.start_button.SetLabel("Start New Session")
+            self.start_button.SetLabel("Start New Dummy Session" if self.config.dummy_mode else "Start New Session")
             self.start_button.Enable(self.server_result is not None and self.server_result.can_start)
             self.gpu_check_button.Enable()
             self.participant.Enable()
+            self.dummy_toggle.Enable()
             self.SetClientSize((540, 600))
             self.Layout()
             self.Show()

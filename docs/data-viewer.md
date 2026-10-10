@@ -1,6 +1,6 @@
 # EDF and sentence images
 
-Use `dummy_mode=False` in the root `config.py` and connect a real EyeLink Host. Dummy mode produces local logs and sentence images, but no eye samples or EDF. The separate calibration check is not an experiment recording.
+Clear **Dummy mode (no EyeLink)** in the login window and connect a real EyeLink Host. Dummy mode produces local logs and sentence images, but no eye samples or EDF. The separate calibration check is not an experiment recording.
 
 Launch using **Start Experiment**, enter the participant ID, complete calibration/validation and run the reading conditions. Leave the application running while the final **Saving session data. Please wait.** screen is shown. Normal completion and Escape both attempt to stop recording, close the Host EDF and download it before disconnecting. The result window reports the saved EDF path and byte count, or the Host filename to recover if transfer fails.
 

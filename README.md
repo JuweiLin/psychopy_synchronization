@@ -11,21 +11,22 @@ Double-click the entry for the experiment computer:
 
 Keep the whole project folder together when copying it to another computer. Enter a participant ID such as `S001`, then click **Start Experiment**. No name or password is collected. No terminal commands need to be typed; a terminal/console window opens only to launch the application.
 
+Select **Dummy mode (no EyeLink)** in the login window to skip calibration and eye tracking for that session, then click **Start Dummy Session**. Clear the checkbox for a real EyeLink session. The login opens in real EyeLink mode by default. The selection is passed to the experiment process; there is no dummy-mode setting in `config.py`. Mode changes recheck GPU readiness and apply the corresponding dependency checks. Configured TTS still uses the GPU service in either mode.
+
 The launcher looks for a project `.venv` / `venv` and an installed PsychoPy application. Dummy mode requires PsychoPy and wxPython; configured Condition 2 playback also requires PsychoPy's PTB (`psychtoolbox`) and `soundfile` audio dependencies. Real recording also requires SR Research PyLink (`pylink`) and `EyeLinkCoreGraphicsPsychoPy`. Missing components are shown before the experiment starts. Windows discovery checks common PsychoPy installation folders under Program Files and Local AppData/Programs. If automatic launch fails, a file chooser lets you select `python.exe` inside the PsychoPy installation folder. This choice is saved under `data/launcher_logs/windows-python.txt` for future launches. If PsychoPy is not installed, install PsychoPy Standalone first. Opening the `.py` file directly depends on Windows file associations; use the `.bat` entry. The Windows chooser has not been tested on a Windows computer yet.
 
 ## Configure
 
-Edit only [config.py](config.py) in the project root before launching. It contains five settings:
+Edit only [config.py](config.py) in the project root before launching. It contains four settings:
 
 ```python
-dummy_mode = True
 condition1_count = 2
 condition2_count = 2
 eyelink_ip = "100.1.1.1"
 tts_server_url = "http://192.168.137.2:8765"
 ```
 
-With `dummy_mode=True`, the experiment skips the EyeLink connection, calibration, recording, package checks and EDF transfer. It keeps article selection, reading, flip timestamps, WPM, CSV logs and configured Condition 2 audio playback. Set it to `False` for the real EyeLink setup. The login and ready screen identify dummy mode in English.
+With **Dummy mode (no EyeLink)** selected in the login window, the experiment skips the EyeLink connection, calibration, recording, package checks and EDF transfer. It keeps article selection, reading, flip timestamps, WPM, CSV logs and configured Condition 2 audio playback. Clear the checkbox for the real EyeLink setup. The login and ready screen identify dummy mode in English.
 
 The two counts control how many articles are sampled for each condition. Set `eyelink_ip` to the tracker address for real recording. Leave `tts_server_url` empty until the GPU address is known, then fill in its origin, such as `"http://192.168.1.20:8765"`. Save the file and reopen the launcher after changes. Internal display defaults and validation remain in `psychopy_sync/config.py`.
 

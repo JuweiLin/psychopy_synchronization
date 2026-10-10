@@ -23,7 +23,7 @@ class UserConfigTests(unittest.TestCase):
         return runpy.run_path(str(internal))
 
     def test_edited_settings_control_real_mode_counts_tracker_and_tts(self):
-        module = self.load_config('dummy_mode = False\ncondition1_count = 3\n'
+        module = self.load_config('condition1_count = 3\n'
             'condition2_count = 5\neyelink_ip = "100.1.1.2"\n'
             'tts_server_url = "http://192.168.1.20:8765"\n')
         config = module["ExperimentConfig"]()
@@ -34,16 +34,16 @@ class UserConfigTests(unittest.TestCase):
         self.assertEqual(config.tts_server_url, "http://192.168.1.20:8765")
         self.assertEqual(replace(config, condition1_count=1).condition1_count, 1)
 
-    def test_dummy_switch_and_empty_url_keep_hardware_and_service_optional(self):
-        module = self.load_config('dummy_mode = True\ncondition1_count = 1\n'
+    def test_dummy_override_and_empty_url_keep_hardware_and_service_optional(self):
+        module = self.load_config('condition1_count = 1\n'
             'condition2_count = 0\neyelink_ip = "100.1.1.1"\ntts_server_url = ""\n')
-        config = module["ExperimentConfig"]()
+        config = module["ExperimentConfig"](dummy_mode=True)
         self.assertEqual(required_modules(config), ("psychopy", "wx"))
         self.assertIsNone(config.tts_server_url)
         self.assertEqual(config.condition2_count, 0)
 
     def test_invalid_user_count_is_rejected(self):
-        module = self.load_config('dummy_mode = True\ncondition1_count = 0\n'
+        module = self.load_config('condition1_count = 0\n'
             'condition2_count = 2\neyelink_ip = "100.1.1.1"\ntts_server_url = ""\n')
         with self.assertRaisesRegex(ValueError, "condition1_count"):
             module["ExperimentConfig"]()

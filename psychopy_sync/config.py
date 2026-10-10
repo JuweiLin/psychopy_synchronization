@@ -44,7 +44,7 @@ class EyeLinkConfig:
 
 @dataclass(frozen=True)
 class ExperimentConfig:
-    dummy_mode: bool = _USER_SETTINGS["dummy_mode"]
+    dummy_mode: bool = False  # Selected in the login window for each session.
     assets_dir: Path = PROJECT_ROOT / "assets"
     articles_folder: str = "articles"  # Scan assets/articles/<article_id>.csv
     tts_folder: str = "TTS"  # assets/TTS/<participant_id>/<session_id>/

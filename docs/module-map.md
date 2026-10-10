@@ -8,10 +8,10 @@ The experiment measures Condition 1 reading speed, then presents Condition 2 sen
 | `launch_experiment.py` | Calls runtime discovery |
 | `psychopy_sync/launcher_bootstrap.py` | Finds the PsychoPy/wx environment, including common Windows and macOS standalone installations |
 | `psychopy_sync/windows_python_picker.ps1` | Windows fallback file chooser and saved interpreter path |
-| `psychopy_sync/launcher.py` | English ID form, asynchronous GPU checks on opening/before starting, dependency checks and results |
+| `psychopy_sync/launcher.py` | English ID form with per-session Dummy mode switch, asynchronous GPU checks, dependency checks and results |
 | `psychopy_sync/server_check.py` | Bounded readiness requests, protocol/mode checks and readable connection failures |
 | `psychopy_sync/desktop_runner.py` | Runs the experiment in a separate process and returns its outcome to the form |
-| `config.py` | Five editable settings: dummy mode, condition counts, tracker IP and GPU URL |
+| `config.py` | Four editable settings: condition counts, tracker IP and GPU URL |
 | `psychopy_sync/config.py` | Loads root settings; keeps internal defaults and validation |
 | `psychopy_sync/experiment.py` | Calibration → continuous recording → Condition 1 → speed → background TTS → Condition 2 playback → cleanup |
 | `psychopy_sync/articles.py` | Loads article CSVs, preserves pages, counts words and samples disjoint conditions |

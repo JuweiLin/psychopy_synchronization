@@ -2,7 +2,7 @@
 
 ## Before a session
 
-1. Install PsychoPy and wxPython. For real recording (`dummy_mode=False`), also install SR Research PyLink (`pylink`) and `EyeLinkCoreGraphicsPsychoPy`.
+1. Install PsychoPy and wxPython. For real recording (the login's Dummy mode checkbox cleared), also install SR Research PyLink (`pylink`) and `EyeLinkCoreGraphicsPsychoPy`.
 2. For real recording, connect the EyeLink Host and verify `eyelink_ip` in the root `config.py` (currently `100.1.1.1`).
 3. The display defaults to screen 0, fullscreen and 1920 × 1080. The formal experiment measures refresh rate; it does not use the calibration check's assumed 60 Hz. Advanced display defaults remain in `psychopy_sync/config.py`.
 4. Set `condition1_count` and `condition2_count` in the root `config.py`. Confirm that `assets/articles/` contains enough article CSVs.
@@ -12,13 +12,13 @@ Double-click `Start Experiment.bat` on Windows or `Start Experiment.command` on 
 
 ## Dummy mode
 
-Set `dummy_mode=True` in the root `config.py` to use this mode. It does not require or probe `pylink` or `EyeLinkCoreGraphicsPsychoPy`, does not connect to a tracker, and skips calibration and all recording/EDF operations. It shows a dummy ready screen before Condition 1. PsychoPy and wxPython are still required for the display and login.
+Select **Dummy mode (no EyeLink)** in the login window, then click **Start Dummy Session**. There is no dummy-mode setting in the root config; the login defaults to real EyeLink mode. The selected mode is passed explicitly to the experiment process. Dummy-mode session preflight does not require or probe `pylink` or `EyeLinkCoreGraphicsPsychoPy`, does not connect to a tracker, and skips calibration and all recording/EDF operations. It shows a dummy ready screen before Condition 1. PsychoPy and wxPython are still required for the display and login.
 
 Article selection, sentence pages, keyboard controls, flip timestamps, WPM calculation, event logs and configured Condition 2 playback run normally. Condition 2 requires PsychoPy's PTB and soundfile dependencies even in dummy mode. `tts_server_url` still controls whether audio is generated; dummy mode does not disable the GPU service. A demo-silence server can pass the readiness check only in dummy mode; real EyeLink sessions require a verified F5-TTS server when a URL is configured.
 
 Dummy session files and global tables are stored under `data/dummy/`. Session metadata records `dummy_mode=true`, `edf_status=disabled_dummy`, an empty Host EDF filename and no EyeLink configuration. Local events use `marker_status=disabled_dummy`, not `sent`. No synthetic eye data or EDF is created. The TTS manifest also records the mode.
 
-Set `dummy_mode=False` before real device testing. The remaining recording sequence and EDF recovery details below describe real mode.
+Clear **Dummy mode (no EyeLink)** before real device testing. The remaining recording sequence and EDF recovery details below describe real mode.
 
 ## Articles and selection
 
