@@ -6,3 +6,6 @@ torchcodec==0.5
 # Keep F5-TTS's existing Transformers API and NumPy audio interoperability.
 transformers>=4.44,<5
 numpy>=1.26,<2
+# F5-TTS imports datasets/PyArrow even for inference. New PyArrow builds require
+# NumPy 2 at runtime; keep a release compatible with this NumPy 1.x environment.
+pyarrow==23.0.1
