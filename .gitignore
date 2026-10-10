@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+generated_audio/
+audio_cache/
+data/
+assets/TTS/*
+!assets/TTS/.gitkeep
