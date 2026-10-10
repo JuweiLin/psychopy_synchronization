@@ -17,7 +17,7 @@ device = "cuda"
 demo_mode = False
 ```
 
-The paths can be absolute or relative to `gpu_config.py`. The text file must contain the reference recording's exact transcript. Keep the server terminal open during the experiment.
+The paths can be absolute or relative to `gpu_config.py`. The project includes the [official F5-TTS English reference sample](https://github.com/SWivid/F5-TTS/blob/main/src/f5_tts/infer/examples/basic/basic.toml) as `assets/reference.wav` and its matching transcript as `assets/reference.txt`, so the default paths can be used directly. If you replace the recording, update the text file with its exact transcript too. Keep the server terminal open during the experiment.
 
 ### Automatic setup on Ubuntu/Linux
 
