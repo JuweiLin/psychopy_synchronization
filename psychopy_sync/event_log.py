@@ -12,12 +12,15 @@ from pathlib import Path
 import re
 import uuid
 
-ARTICLE_FIELDS = ["participant_id", "session_id", "order", "article_id", "title", "path",
+ARTICLE_FIELDS = ["participant_id", "session_id", "condition", "order", "article_id", "title", "path",
                   "source_rows", "source_sha256", "text_sha256", "pages_sha256",
                   "count_mode", "unit_count", "status", "page_count",
                   "start_event_id", "end_event_id", "start_timestamp_s", "end_timestamp_s",
-                  "reading_duration_s", "timing_source"]
+                  "reading_duration_s", "elapsed_duration_s", "baseline_duration_s", "timing_source"]
 ARTICLE_FIELDS += ["audio_status", "audio_path", "audio_index_path", "audio_job_id", "audio_error"]
+ARTICLE_FIELDS += ["baseline_trial_id", "baseline_screenshot_path", "baseline_ias_path", "baseline_status",
+                   "baseline_target_s", "baseline_start_event_id", "baseline_end_event_id",
+                   "baseline_start_timestamp_s", "baseline_end_timestamp_s"]
 LOG_FIELDS = ["participant_id", "session_id", "event_id", "event", "condition", "article_id",
               "page", "timestamp_s", "timestamp_source", "logged_at_utc", "message",
               "marker_status", "detail"]
@@ -95,14 +98,19 @@ class SessionStore:
         self.rows = {}
         for condition, selected in articles.items():
             self.rows[condition] = [dict(
-                participant_id=participant_id, session_id=self.session_id, order=index,
+                participant_id=participant_id, session_id=self.session_id, condition=condition, order=index,
                 article_id=a.article_id, title=a.title, path=a.path, text_sha256=a.text_sha256,
                 source_rows=json.dumps(a.source_rows), source_sha256=a.source_sha256, pages_sha256=a.pages_sha256,
                 count_mode=a.count_mode, unit_count=a.unit_count, status="not_presented", page_count=len(a.pages),
                 start_event_id="", end_event_id="", start_timestamp_s="", end_timestamp_s="",
-                reading_duration_s="", timing_source="psychopy_flip",
+                reading_duration_s="", elapsed_duration_s="", baseline_duration_s="", timing_source="psychopy_flip",
                 audio_status="not_requested" if condition == "condition2" else "",
                 audio_path="", audio_index_path="", audio_job_id="", audio_error="",
+                baseline_trial_id=f"c{condition[-1]}_{a.article_id}_baseline",
+                baseline_screenshot_path="screenshots/baseline.png", baseline_ias_path="interest_areas/baseline.ias",
+                baseline_status="not_presented", baseline_target_s=config.article_baseline_s,
+                baseline_start_event_id="", baseline_end_event_id="",
+                baseline_start_timestamp_s="", baseline_end_timestamp_s="",
             ) for index, a in enumerate(selected, 1)]
         self.metadata = dict(participant_id=participant_id, session_id=self.session_id,
                              created_at_utc=utc_now(), status="initialized", config=asdict(config),
@@ -111,7 +119,7 @@ class SessionStore:
                              edf_status="disabled_dummy" if config.dummy_mode else "not_opened")
         self.metadata.update(edf_path="", edf_bytes=0,
                              edf_expected_path=str((self.directory / "eyelink.edf").resolve()),
-                             dataviewer_trial_unit="sentence", screenshots_status="pending",
+                             dataviewer_trial_unit="article_baseline_and_sentence", screenshots_status="pending",
                              screenshots_directory=str((self.directory / "screenshots").resolve()),
                              sentence_index_path=str((self.directory / "sentence_pages.csv").resolve()),
                              word_aoi_status="pending", word_aoi_unit="whitespace_token",
@@ -119,6 +127,13 @@ class SessionStore:
                              word_aoi_coordinates="framebuffer_pixels_top_left_origin_inclusive",
                              word_aoi_index_path=str((self.directory / "word_aois.csv").resolve()),
                              word_aoi_directory=str((self.directory / "interest_areas").resolve()))
+        self.metadata.update(article_baseline_s=config.article_baseline_s, baseline_scope="article",
+                             baseline_assets_status="pending",
+                             baseline_background="black", baseline_cross_color="white",
+                             baseline_screenshot_path="screenshots/baseline.png",
+                             baseline_ias_path="interest_areas/baseline.ias",
+                             baseline_preview_path="aoi_previews/baseline.png",
+                             reading_duration_method="sum_of_visible_sentence_intervals")
         self.sentences = []
         self.words = []
         for condition, selected in articles.items():
@@ -162,6 +177,13 @@ class SessionStore:
         temporary = self.directory / "session.json.tmp"
         temporary.write_text(json.dumps(self.metadata, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         temporary.replace(self.directory / "session.json")
+
+    def article_durations(self, condition, article_id):
+        pages = [row for row in self.sentences if row["condition"] == condition and row["article_id"] == article_id]
+        if not pages or any(row["status"] != "completed" or not isinstance(row["duration_s"], (int, float))
+                            or row["duration_s"] <= 0 for row in pages):
+            raise ValueError("Reading duration requires every sentence interval to be completed")
+        return dict(reading_duration_s=sum(row["duration_s"] for row in pages))
 
     def save_speed(self, summary):
         if "reading_speed" in self.metadata:

@@ -125,6 +125,7 @@ class EyeLinkController:
         # AREA stores pupil size; raw gaze, blinks, fixations and messages stay in EDF.
         self.tracker.sendCommand("file_sample_data = LEFT,RIGHT,GAZE,AREA,GAZERES,STATUS,INPUT")
         self.tracker.sendCommand("file_event_filter = LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT")
+        self.tracker.sendCommand("file_event_data = GAZE,GAZERES,AREA,VELOCITY,STATUS")
 
     def start_recording(self):
         if not self._edf_open or self._recording:

@@ -21,6 +21,9 @@ class ReadingDisplay:
                                       font=config.font, wrapWidth=self.text_width / scale, autoLog=False)
         self.footer = visual.TextStim(win, text=f"{config.advance_key.upper()}: next page / finish", height=20 / scale, color="white",
                                       pos=(0, -win.size[1] * 0.44 / scale), autoLog=False)
+        self.baseline_cross = visual.TextStim(win, text="+", units="pix", pos=(0, 0),
+                                             height=config.text_height_px / scale,
+                                             font=config.font, color="white", autoLog=False)
 
     @property
     def text_scale(self):
@@ -115,11 +118,36 @@ class ReadingDisplay:
 
         self._wait(draw, lambda: self._page_on_flip(log, onset, "condition1", article_id, page_index))
 
+    def show_baseline(self, log, condition, article_id):
+        """Keep '+' visible until the first sentence's flip can reach 1500 ms.
+
+        Return with the cross still on the front buffer; the caller replaces
+        it directly with the sentence. Both ends are recorded on real flips.
+        getFutureFlipTime(None) and timeOnFlip share PsychoPy's default clock.
+        """
+        self.keyboard.clearEvents()
+        self.controller.check_recording()
+        self.baseline_cross.draw()
+        timing = {}
+        self.win.timeOnFlip(timing, "timestamp")
+        self.win.callOnFlip(lambda: self.data_viewer.start_baseline(
+            log, condition, article_id, timing["timestamp"]))
+        self.win.flip()
+        deadline = timing["timestamp"] + self.config.article_baseline_s
+        while True:
+            self.controller.check_recording()
+            if self.keyboard.getKeys(keyList=[self.config.quit_key], waitRelease=False, clear=True):
+                raise ExperimentAborted("Escape pressed during article baseline")
+            if self.win.getFutureFlipTime(clock=None) >= deadline - 1e-6:
+                return
+            self.baseline_cross.draw()
+            self.win.flip()
+
     def clear_article(self, log, end, event, article_id, condition="condition1", page=None, page_status="completed"):
         self.win.clearBuffer()
         timing = {}
         self.win.timeOnFlip(timing, "timestamp")
-        self.win.callOnFlip(lambda: self.data_viewer.end_page(log, timing["timestamp"], status=page_status))
+        self.win.callOnFlip(lambda: self.data_viewer.end_phase(log, timing["timestamp"], status=page_status))
         log.on_flip(self.win, end, event, condition=condition, article_id=article_id)
         self.win.flip()
 
@@ -156,7 +184,7 @@ class ReadingDisplay:
             playback.play(when=scheduled)
             self._page_on_flip(log, onset, "condition2", article_id, page_index)
             log.on_flip(self.win, {}, "AUDIO_START", condition="condition2", article_id=article_id,
-                        page=page_index, detail=detail)
+                        page=page_index, detail=detail, marker="AUDIO_START")
             self.win.flip()
             deadline = log.clock() + cached.metadata["duration_s"] + 10.0
             while True:
@@ -165,7 +193,7 @@ class ReadingDisplay:
                     raise ExperimentAborted("Escape pressed during Condition 2 playback")
                 if playback.isFinished:
                     log.emit("AUDIO_END", "condition2", article_id, page=page_index,
-                             detail=f"PTB completion observed; job_id={cached.job_id}")
+                             detail=f"PTB completion observed; job_id={cached.job_id}", marker="AUDIO_END")
                     return
                 if log.clock() > deadline:
                     raise RuntimeError(f"Audio playback timed out for article {article_id}, sentence {page_index}")
@@ -173,7 +201,8 @@ class ReadingDisplay:
                 self.win.flip()
         except BaseException:
             try:
-                log.emit("AUDIO_ABORT", "condition2", article_id, page=page_index, detail=detail)
+                log.emit("AUDIO_ABORT", "condition2", article_id, page=page_index, detail=detail,
+                         marker="AUDIO_ABORT")
             except Exception:
                 pass  # Keep the original playback/recording failure.
             raise

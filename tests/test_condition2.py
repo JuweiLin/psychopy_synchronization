@@ -38,8 +38,8 @@ class Window:
         self.callOnFlip(lambda: target.update({key: self.now}))
 
     def getFutureFlipTime(self, clock):
-        assert clock == "ptb"
-        return 1000.0 + self.now + 0.05
+        assert clock in (None, "ptb")
+        return (1000.0 if clock == "ptb" else 0) + self.now + 0.05
 
     def flip(self):
         self.now += 0.05
@@ -102,6 +102,8 @@ class Condition2Tests(unittest.TestCase):
         self.view = ReadingDisplay.__new__(ReadingDisplay)
         self.view.win, self.view.config, self.view.controller = self.win, config, self.controller
         self.view.keyboard, self.view.prompt = MagicMock(), MagicMock()
+        self.view.baseline_cross = MagicMock()
+        self.store.metadata["baseline_assets_status"] = "saved"
         self.view.data_viewer = DataViewerExport(self.store)
         for row in self.store.sentences:
             row["screenshot_status"] = "saved"
@@ -162,8 +164,12 @@ class Condition2Tests(unittest.TestCase):
         sentence_rows = [r for r in csv_rows(self.store.directory / "sentence_pages.csv")
                          if r["condition"] == "condition2"]
         self.assertEqual([r["status"] for r in sentence_rows], ["completed"] * 4)
-        self.assertEqual(len([r for r in events if r["message"].startswith("TRIALID ")]), 4)
-        self.assertEqual(len([r for r in events if r["message"].startswith("!V IMGLOAD FILL ")]), 4)
+        self.assertEqual(len([r for r in events if r["message"].startswith("TRIALID ")]), 6)
+        self.assertEqual(len([r for r in events if r["message"].startswith("!V IMGLOAD FILL ")]), 6)
+        self.assertEqual(len([r for r in events if r["event"] == "BASELINE_START"]), 2)
+        self.assertEqual(len([r for r in events if r["event"] == "BASELINE_END"]), 2)
+        for row in rows:
+            self.assertAlmostEqual(float(row["baseline_duration_s"]), 1.5)
         for row, page in zip(sentence_rows, page_starts):
             self.assertEqual(row["start_timestamp_s"], page["timestamp_s"])
         self.assertTrue(all(call.kwargs["keyList"] == ["escape"]

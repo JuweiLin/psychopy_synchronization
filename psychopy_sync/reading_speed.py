@@ -1,4 +1,4 @@
-"""Aggregate event-paired article durations, excluding every between-article gap."""
+"""Aggregate visible reading intervals, excluding baselines and switching gaps."""
 
 import math
 
@@ -15,8 +15,12 @@ def reading_summary(rows, expected_count):
     for row in rows:
         if not row["start_event_id"] or not row["end_event_id"]:
             raise ValueError("Missing paired article events")
-        duration = row["end_timestamp_s"] - row["start_timestamp_s"]
-        if not math.isfinite(duration) or duration <= 0 or row["unit_count"] <= 0:
+        elapsed = row["end_timestamp_s"] - row["start_timestamp_s"]
+        duration = row.get("reading_duration_s")
+        if duration in (None, ""):
+            duration = elapsed  # Compatibility with old article-only records.
+        if (not math.isfinite(elapsed) or elapsed <= 0 or not math.isfinite(duration)
+                or duration <= 0 or duration > elapsed + 1e-6 or row["unit_count"] <= 0):
             raise ValueError("Reading counts and durations must be positive")
         total_s += duration
         total_units += row["unit_count"]

@@ -88,6 +88,11 @@ class FakeView:
         if article_id == self.abort_article:
             raise ExperimentAborted("Escape pressed")
 
+    def show_baseline(self, log, condition, article_id):
+        self.data_viewer.start_baseline(log, condition, article_id, self.win.now)
+        # The fake read_page contributes the remaining second before its flip.
+        self.win.now += 0.5
+
     def clear_article(self, log, end, event, article_id, **kwargs):
         self.win.now += 10
         ReadingDisplay.clear_article(self, log, end, event, article_id, **kwargs)
@@ -121,6 +126,8 @@ class ExperimentTests(unittest.TestCase):
                         patch("psychopy_sync.experiment.create_window", return_value=self.win),
                         patch("psychopy_sync.experiment.EyeLinkController", return_value=self.controller),
                         patch("psychopy_sync.experiment.ReadingDisplay", FakeView),
+                        patch.object(DataViewerExport, "prepare_baseline", autospec=True,
+                              side_effect=lambda exporter, view: exporter.store.metadata.update(baseline_assets_status="saved")),
                         patch("psychopy_sync.data_viewer.save_aoi_preview",
                               side_effect=lambda image, areas, path: path.write_bytes(b"fake-preview")),
                         patch.object(FakeView, "abort_article", None)):
@@ -180,10 +187,14 @@ class ExperimentTests(unittest.TestCase):
         self.assertTrue(all((directory / r["screenshot_path"]).is_file() for r in pages))
         self.assertEqual(self.win.movieFrames, [])
         markers = [call.args[0] for call in self.controller.send_marker.call_args_list]
-        self.assertEqual(len([m for m in markers if m.startswith("TRIALID ")]), 2)
+        self.assertEqual(len([m for m in markers if m.startswith("TRIALID ")]), 4)
         self.assertEqual(markers.count("SENTENCE_ONSET"), 2)
         self.assertEqual(markers.count("SENTENCE_OFFSET"), 2)
-        self.assertEqual(markers.count("TRIAL_RESULT 0"), 2)
+        self.assertEqual(markers.count("TRIAL_RESULT 0"), 4)
+        self.assertEqual(markers.count("BASELINE_START"), 2)
+        self.assertEqual(markers.count("BASELINE_END"), 2)
+        self.assertTrue(all(float(row["baseline_duration_s"]) == 1.5
+                            for row in read_csv(directory / "condition1.csv")))
         self.assertTrue(all(m.isascii() and len(m) <= 130 for m in markers))
 
     def test_dummy_session_runs_without_eyelink_packages_calibration_or_edf(self):

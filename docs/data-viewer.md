@@ -17,13 +17,16 @@ data/<participant_id>/<session_id>/
   word_aois.csv
   stimuli/
   screenshots/
+    baseline.png
     condition1/<article_id>/sentence_0001.png
     condition1/<article_id>/sentence_0002.png
     condition2/<article_id>/sentence_0001.png
   interest_areas/
+    baseline.ias
     condition1/<article_id>/sentence_0001.ias
     condition2/<article_id>/sentence_0001.ias
   aoi_previews/
+    baseline.png
     condition1/<article_id>/sentence_0001.png
     condition2/<article_id>/sentence_0001.png
 ```
@@ -33,6 +36,8 @@ Every selected CSV page is rendered and captured once before calibration/recordi
 Legacy OpenGL TextStim rendering on macOS Retina displays applies an extra 2x pixel scale. Text height, wrap width and footer position are compensated together so they still refer to the framebuffer pixels used by EyeLink. Standard Windows and newer OpenGL rendering retain their normal scale.
 
 `sentence_pages.csv` contains the condition, article ID, sentence index, source CSV record number, exact text, trial ID, relative PNG path, image checksum/dimensions, presentation status, start/end event IDs, local flip timestamps and duration. Images can exist for pages that were never presented; their status remains `not_presented`. An aborted/failed page is flagged separately. A connection/flip failure without a confirmed offset leaves an open interval marked `interrupted`.
+
+In both conditions, each article starts with one central white `+` on the same black background for a target of 1500 ms. Sentences within the article follow directly, without further baselines. The cross screenshot and its rectangular AOI are prepared once and reused. The article rows in `condition1.csv` and `condition2.csv` contain the baseline trial ID, image/IAS paths, status, paired event IDs and flip timestamps, target duration and actual duration. Baseline time is excluded from reading speed; `reading_duration_s` sums the visible sentence intervals.
 
 ## Data Viewer import
 
@@ -44,7 +49,7 @@ The same positions generate word AOI rectangles. Each whitespace token is one AO
 
 1. Copy the **whole session folder**, preserving the EDF, `screenshots/` and `interest_areas/` hierarchy.
 2. Import `eyelink.edf` into EyeLink Data Viewer. Images are referenced relative to that EDF's location. If the software asks for an image directory, point it to the copied session folder and keep the relative hierarchy intact.
-3. Each sentence is a separate trial. Trial variables `condition`, `article_id` and `sentence_index` identify its place in the experiment. Use them to group results by article or condition.
+3. Each article has one baseline trial followed by one trial per sentence. Trial variables `condition`, `article_id`, `sentence_index` and `phase` identify each trial. Baselines have `phase=baseline` and `sentence_index=0`; sentences have `phase=reading`. Join the baseline and reading results by condition and article ID.
 4. Inspect the background screenshot and gaze overlay. Confirm text and gaze use the same screen coordinates.
 5. Word AOIs load through the trial's `!V IAREA FILE` message. Enable interest-area outlines in the Spatial Overlay view and inspect them against the words. There is no need to use **Auto Segment Image into Interest Areas**. Compare `aoi_previews/` and `word_aois.csv` if anything looks misplaced. Older EDFs without the IAS message still need manual association of compatible AOI files or Data Viewer's segmentation tools; updating the program does not add AOIs to old recordings.
 6. Export the required fixation, interest-area or sample reports from Data Viewer. These reports are analysis outputs; the experiment itself saves the raw EDF and event/page tables.
@@ -52,23 +57,48 @@ The same positions generate word AOI rectangles. Each whitespace token is one AO
 The EDF contains unprefixed Data Viewer commands, for example:
 
 ```text
+TRIALID c1_A_baseline
+!V TRIAL_VAR condition condition1
+!V TRIAL_VAR article_id A
+!V TRIAL_VAR sentence_index 0
+!V TRIAL_VAR phase baseline
+!V IMGLOAD FILL screenshots/baseline.png
+!V IAREA FILE interest_areas/baseline.ias
+BASELINE_START
+...
+BASELINE_END
+TRIAL_RESULT 0
 TRIALID c1_A_s0001
 !V TRIAL_VAR condition condition1
 !V TRIAL_VAR article_id A
 !V TRIAL_VAR sentence_index 1
+!V TRIAL_VAR phase reading
 !V IMGLOAD FILL screenshots/condition1/A/sentence_0001.png
 !V IAREA FILE interest_areas/condition1/A/sentence_0001.ias
+PASSAGE_START condition1 A
+SENTENCE_START
 SENTENCE_ONSET
 ...
 SENTENCE_OFFSET
+SENTENCE_END
 TRIAL_RESULT 0
 ```
 
-Trial start/image/AOI/onset messages are sent in the first-flip callback. The previous sentence's offset/result is sent on the same flip that replaces it with the next sentence, before starting the next trial. The final sentence ends on the blank flip at article end. Interrupted trials use `TRIAL_RESULT 1` when an offset can still be recorded. Recording remains continuous across all these analysis trials; no per-sentence stop/start is performed.
+Trial start/image/AOI/onset messages are sent in the first-flip callback. `BASELINE_END` is sent on the first sentence's flip, before starting its reading trial. The previous sentence's offset/result is sent on the same flip that replaces it with the next sentence, before starting the next trial. The final sentence ends on the blank flip at article end, with `PASSAGE_END condition1 A` before its trial result. Interrupted trials use `TRIAL_RESULT 1` when an offset can still be recorded. Recording remains continuous across all these analysis trials; no per-sentence stop/start is performed. Condition markers and Condition 2 audio markers (`AUDIO_START`, `AUDIO_END`, or `AUDIO_ABORT`) are also recorded.
+
+For Data Viewer interest periods, use `BASELINE_START` to `BASELINE_END` within baseline trials and `SENTENCE_START` to `SENTENCE_END` within reading trials. Passage start and end belong to different sentence trials in a multi-sentence article; aggregate those trials by article for passage-level analysis.
 
 `user_logs.csv` saves the exact message strings, including Data Viewer commands, alongside local event IDs and flip timestamps. EDF timestamps are EyeLink message-reception times; local reading durations use PsychoPy flip timestamps. Software messages do not measure physical screen/speaker latency. Validate overlays and audiovisual timing on the acquisition hardware before formal collection.
 
 Protocol reference: [SR Research Data Viewer integration messages](https://www.sr-research.com/support/thread-83.html). Segmentation reference: [SR Research text interest areas](https://www.sr-research.com/support/thread-167-post-167.html).
+
+## Continuous pupil samples
+
+Real EyeLink sessions save continuous samples to the EDF using `file_sample_data = LEFT,RIGHT,GAZE,AREA,GAZERES,STATUS,INPUT`. Event configuration includes fixation, saccade, blink and message events, with `file_event_data = GAZE,GAZERES,AREA,VELOCITY,STATUS`. There is no Python sample polling loop. The sampling rate and pupil measurement mode remain those configured on the EyeLink Host; the experiment does not assume 500 Hz or convert pupil values to millimetres. See [SR Research file data commands](https://www.sr-research.com/download/dispdoc/cmds7.html).
+
+To export the continuous pupil series, enable **Load Samples** under **Inspector Preferences → Data Loading** before importing the EDF. If already imported without samples, remove that recording from the Data Viewer session and reimport it. Generate a **Sample Report**, including sample timestamps, pupil values, gaze/eye information and the trial variables above. A **Fixation Report** contains fixation-level pupil summaries rather than the continuous series. See [SR Research pupil sample reporting instructions](https://www.sr-research.com/support/thread-169.html).
+
+The experiment saves raw pupil data and the baseline intervals; it does not automatically remove blinks, interpolate missing samples or compute baseline-corrected pupil values. Those steps belong to subsequent analysis. Use the article's baseline trial for its reading trials, and check sample validity before calculating a baseline. Updating the program cannot add baseline periods or new event markers to an earlier EDF; an earlier EDF may already contain pupil samples that can be loaded and reported.
 
 ## EDF verification and recovery
 

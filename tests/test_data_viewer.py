@@ -48,6 +48,10 @@ class DataViewerTests(unittest.TestCase):
                         side_effect=lambda image, areas, path: path.write_bytes(b"fake-preview"))
         preview.start()
         self.addCleanup(preview.stop)
+        baseline = patch.object(DataViewerExport, "prepare_baseline", autospec=True,
+            side_effect=lambda exporter, view: exporter.store.metadata.update(baseline_assets_status="saved"))
+        baseline.start()
+        self.addCleanup(baseline.stop)
         self.drawn = []
 
         def capture(buffer):
@@ -110,6 +114,37 @@ class DataViewerTests(unittest.TestCase):
         self.assertEqual(markers[-1], "TRIAL_RESULT 0")
         self.assertEqual(row["duration_s"], 2.5)
         self.assertTrue(all(m.isascii() and len(m) <= 130 for m in markers))
+
+    def test_one_article_baseline_precedes_two_sentence_trials(self):
+        self.export.prepare(self.view, self.articles, self.prepared)
+        article = self.articles["condition1"][0]
+        self.export.start_baseline(self.log, "condition1", article.article_id, 10.0)
+        self.export.start_page(self.log, "condition1", article.article_id, 1, 11.5)
+        self.export.start_page(self.log, "condition1", article.article_id, 2, 12.5)
+        self.export.end_phase(self.log, 14.0)
+        markers = [call.args[0] for call in self.controller.send_marker.call_args_list]
+        self.assertEqual(markers.count("BASELINE_START"), 1)
+        self.assertEqual(markers.count("BASELINE_END"), 1)
+        self.assertEqual(markers.count("SENTENCE_START"), 2)
+        self.assertEqual(markers.count("SENTENCE_END"), 2)
+        self.assertLess(markers.index("BASELINE_END"), markers.index("SENTENCE_START"))
+        self.assertTrue(markers[-2].startswith("PASSAGE_END "))
+        row = self.store.rows["condition1"][0]
+        self.assertEqual(row["baseline_duration_s"], 1.5)
+        self.assertEqual(self.store.article_durations("condition1", article.article_id)["reading_duration_s"], 2.5)
+
+    def test_escape_during_baseline_leaves_sentence_unpresented(self):
+        self.export.prepare(self.view, self.articles, self.prepared)
+        article = self.articles["condition1"][0]
+        self.export.start_baseline(self.log, "condition1", article.article_id, 10.0)
+        self.export.end_phase(self.log, 10.5, status="aborted")
+        row = self.store.rows["condition1"][0]
+        self.assertEqual(row["baseline_status"], "aborted")
+        self.assertEqual(row["baseline_duration_s"], 0.5)
+        self.assertEqual(self.store.sentences[0]["status"], "not_presented")
+        markers = [call.args[0] for call in self.controller.send_marker.call_args_list]
+        self.assertNotIn("SENTENCE_START", markers)
+        self.assertEqual(markers[-1], "TRIAL_RESULT 1")
 
     def test_connection_failure_keeps_an_open_sentence_without_inventing_an_offset(self):
         self.export.prepare(self.view, self.articles, self.prepared)

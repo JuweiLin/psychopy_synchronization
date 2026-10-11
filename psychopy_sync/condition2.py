@@ -5,13 +5,14 @@ from .display import preload_article_audio
 
 
 def run_condition2(view, articles, prepared, audio, log, store):
-    log.emit("CONDITION_START", "condition2")
+    log.emit("CONDITION_START", "condition2", marker="CONDITION_START condition2")
     log.flush()
     speaker = None
     try:
         for article, row in zip(articles, store.rows["condition2"]):
             start, end, sounds = {}, {}, []
             page_index = None
+            presentation_started = False
             row["status"] = "waiting_for_audio"
             store.save()
             try:
@@ -35,25 +36,28 @@ def run_condition2(view, articles, prepared, audio, log, store):
                 row["status"] = "presenting"
                 store.save()
                 log.emit("TRIAL_START", "condition2", article.article_id)
+                presentation_started = True
+                view.show_baseline(log, "condition2", article.article_id)
                 for page_index, (page, playback, sentence) in enumerate(zip(pages, sounds, cached), 1):
                     view.play_page(page, playback, sentence, log, start, article.article_id, page_index)
                 view.clear_article(log, end, "ARTICLE_END", article.article_id,
                                    condition="condition2", page=page_index)
                 row.update(status="completed", start_event_id=start["event_id"], end_event_id=end["event_id"],
                            start_timestamp_s=start["timestamp_s"], end_timestamp_s=end["timestamp_s"],
-                           reading_duration_s=end["timestamp_s"] - start["timestamp_s"])
+                           elapsed_duration_s=end["timestamp_s"] - start["timestamp_s"],
+                           **store.article_durations("condition2", article.article_id))
             except BaseException as exc:
                 row["status"] = "aborted" if isinstance(exc, ExperimentAborted) else "failed"
                 if start:
                     row.update(start_event_id=start["event_id"], start_timestamp_s=start["timestamp_s"])
-                    if not end:
-                        try:
-                            view.clear_article(log, end, "ARTICLE_ABORT", article.article_id,
-                                               condition="condition2", page=page_index, page_status=row["status"])
-                        except Exception:
-                            pass
-                    if end:
-                        row.update(end_event_id=end["event_id"], end_timestamp_s=end["timestamp_s"])
+                if not end and presentation_started:
+                    try:
+                        view.clear_article(log, end, "ARTICLE_ABORT", article.article_id,
+                                           condition="condition2", page=page_index, page_status=row["status"])
+                    except Exception:
+                        pass
+                if end:
+                    row.update(end_event_id=end["event_id"], end_timestamp_s=end["timestamp_s"])
                 raise
             finally:
                 try:
@@ -69,5 +73,5 @@ def run_condition2(view, articles, prepared, audio, log, store):
     finally:
         if speaker is not None:
             speaker.close()
-    log.emit("CONDITION_END", "condition2")
+    log.emit("CONDITION_END", "condition2", marker="CONDITION_END condition2")
     log.flush()

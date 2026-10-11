@@ -60,6 +60,7 @@ class ExperimentConfig:
     text_height_px: int = 28
     text_width_fraction: float = 0.8
     text_height_fraction: float = 0.7
+    article_baseline_s: float = 1.5
 
     def __post_init__(self):
         if type(self.dummy_mode) is not bool:
@@ -76,3 +77,5 @@ class ExperimentConfig:
             raise ValueError("Advance and quit keys must be distinct")
         if self.text_height_px <= 0 or not 0 < self.text_width_fraction < 1 or not 0 < self.text_height_fraction < 1:
             raise ValueError("Invalid text layout")
+        if self.article_baseline_s != 1.5:
+            raise ValueError("Article baseline duration must be 1.5 seconds")

@@ -36,6 +36,8 @@ Put one article in each `assets/articles/<article_id>.csv`. Each CSV has one col
 
 Both conditions are sampled without replacement at startup. The seed, article order and stimulus snapshots are saved. Space starts each article. In Condition 1, Space advances a page and ends the last page. In Condition 2, each sentence plays its matching WAV and automatically advances when playback finishes. Escape stops the session.
 
+After Space starts an article, a central white `+` appears on the same black background for a target of **1500 ms**, then switches directly to the first sentence. This happens once per article in both conditions; sentences within an article advance directly. The cross has a separate AOI and Data Viewer baseline trial (`phase=baseline`, `sentence_index=0`), linked to the article ID. Sentence trials use `phase=reading`. Actual baseline start/end flips, duration and status are saved in the corresponding condition CSV. Baseline time is excluded from reading speed. Display timing is quantized to refresh cycles; use the recorded timestamps to check actual durations.
+
 ## GPU server
 
 On the GPU computer, set the reference audio and transcript paths in [gpu_config.py](gpu_config.py). On **Ubuntu/Linux**, run:
@@ -73,6 +75,8 @@ For real recording, the result window shows the downloaded EDF path and byte cou
 Every selected sentence is captured as a full-screen PNG before calibration/recording, using the actual PsychoPy page layout (including the Condition 1 footer). Words are measured and positioned individually; those same positions generate word AOI files under `interest_areas/`. `word_aois.csv` records each word and its screen rectangle; `aoi_previews/` contains screenshot copies with red AOI outlines for inspection. `sentence_pages.csv` maps each sentence to its image/IAS files and visible interval; unshown pages stay `not_presented`. Each displayed sentence is one Data Viewer trial with image and `!V IAREA FILE` messages. Copy the complete session folder and import `eyelink.edf` to load the prepared word AOIs. Inspect their alignment; Data Viewer image auto-segmentation is not needed. The new word layout can change line wrapping/spacing compared with earlier sessions and does not retrofit old EDFs. See [Data Viewer output](docs/data-viewer.md).
 
 ## Details
+
+For continuous pupil values in Data Viewer, enable **Inspector → Preferences → Data Loading → Load Samples**, then remove and re-import the EDF before exporting a **Sample Report**. Include timestamps, pupil values, gaze, eye identity and trial variables `condition`, `article_id`, `sentence_index`, `phase`. A Fixation Report contains fixation averages rather than every recorded sample. See the [official sample-loading instructions](https://www.sr-research.com/support/thread-169.html) and [pupil/report guide](docs/data-viewer.md). Existing EDFs may already contain samples; newly added baselines and markers apply only to new sessions.
 
 [Experiment flow and timing](docs/condition1.md) · [Data Viewer output](docs/data-viewer.md) · [GPU audio service](docs/network-audio.md) · [Module map](docs/module-map.md)
 
