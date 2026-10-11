@@ -22,7 +22,7 @@ class ReadingDisplay:
         self.footer = visual.TextStim(win, text=f"{config.advance_key.upper()}: next page / finish", height=20 / scale, color="white",
                                       pos=(0, -win.size[1] * 0.44 / scale), autoLog=False)
         self.baseline_cross = visual.TextStim(win, text="+", units="pix", pos=(0, 0),
-                                             height=config.text_height_px / scale,
+                                             height=2 * config.text_height_px / scale,
                                              font=config.font, color="white", autoLog=False)
 
     @property
