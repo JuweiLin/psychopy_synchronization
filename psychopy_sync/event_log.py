@@ -26,8 +26,12 @@ SPEED_FIELDS = ["participant_id", "session_id", "article_count", "total_units", 
                 "total_reading_s", "speed_per_minute", "speed_unit", "timing_source"]
 SENTENCE_FIELDS = ["participant_id", "session_id", "condition", "article_id", "sentence_index",
                    "source_row", "text", "trial_id", "screenshot_path", "screenshot_status",
-                   "screenshot_sha256", "width_px", "height_px", "status", "start_event_id",
+                   "screenshot_sha256", "width_px", "height_px", "ias_path", "ias_status",
+                   "ias_sha256", "aoi_preview_path", "word_count", "status", "start_event_id",
                    "end_event_id", "start_timestamp_s", "end_timestamp_s", "duration_s"]
+WORD_AOI_FIELDS = ["participant_id", "session_id", "condition", "article_id", "sentence_index",
+                   "trial_id", "screenshot_path", "ias_path", "word_index", "line_index", "word",
+                   "ia_label", "char_start", "char_end", "left", "top", "right", "bottom"]
 
 
 def utc_now():
@@ -109,8 +113,14 @@ class SessionStore:
                              edf_expected_path=str((self.directory / "eyelink.edf").resolve()),
                              dataviewer_trial_unit="sentence", screenshots_status="pending",
                              screenshots_directory=str((self.directory / "screenshots").resolve()),
-                             sentence_index_path=str((self.directory / "sentence_pages.csv").resolve()))
+                             sentence_index_path=str((self.directory / "sentence_pages.csv").resolve()),
+                             word_aoi_status="pending", word_aoi_unit="whitespace_token",
+                             word_aoi_layout="positioned_word_textstim_v1",
+                             word_aoi_coordinates="framebuffer_pixels_top_left_origin_inclusive",
+                             word_aoi_index_path=str((self.directory / "word_aois.csv").resolve()),
+                             word_aoi_directory=str((self.directory / "interest_areas").resolve()))
         self.sentences = []
+        self.words = []
         for condition, selected in articles.items():
             for article in selected:
                 for index, (text, source_row) in enumerate(zip(article.pages, article.source_rows), 1):
@@ -120,6 +130,9 @@ class SessionStore:
                         trial_id=f"c{condition[-1]}_{article.article_id}_s{index:04d}",
                         screenshot_path=f"screenshots/{condition}/{article.article_id}/sentence_{index:04d}.png",
                         screenshot_status="pending", screenshot_sha256="", width_px="", height_px="",
+                        ias_path=f"interest_areas/{condition}/{article.article_id}/sentence_{index:04d}.ias",
+                        ias_status="pending", ias_sha256="", word_count="",
+                        aoi_preview_path=f"aoi_previews/{condition}/{article.article_id}/sentence_{index:04d}.png",
                         status="not_presented", start_event_id="", end_event_id="",
                         start_timestamp_s="", end_timestamp_s="", duration_s=""))
         first_article = articles["condition1"][0]
@@ -145,6 +158,7 @@ class SessionStore:
         for condition, rows in self.rows.items():
             write_csv(self.directory / (condition + ".csv"), ARTICLE_FIELDS, rows)
         write_csv(self.directory / "sentence_pages.csv", SENTENCE_FIELDS, self.sentences)
+        write_csv(self.directory / "word_aois.csv", WORD_AOI_FIELDS, self.words)
         temporary = self.directory / "session.json.tmp"
         temporary.write_text(json.dumps(self.metadata, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         temporary.replace(self.directory / "session.json")

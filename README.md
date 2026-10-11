@@ -54,7 +54,7 @@ The service loads the model and generates a short test WAV at startup. The login
 
 - `data/users.csv`: participant IDs and first registration times.
 - `data/reading_speed.csv`: reading speed for each participant/session.
-- `data/<participant_id>/<session_id>/`: `condition1.csv`, `condition2.csv`, `user_logs.csv`, `sentence_pages.csv`, `session.json`, `stimuli/`, `screenshots/` and `eyelink.edf`.
+- `data/<participant_id>/<session_id>/`: `condition1.csv`, `condition2.csv`, `user_logs.csv`, `sentence_pages.csv`, `word_aois.csv`, `session.json`, `stimuli/`, `screenshots/`, `interest_areas/`, `aoi_previews/` and `eyelink.edf`.
 - `assets/TTS/<participant_id>/<session_id>/`: `tts_index.csv`, requests, manifest and sentence WAVs inside article folders.
 - `data/launcher_logs/`: startup and experiment diagnostics.
 
@@ -70,7 +70,7 @@ Hardware recording, EDF transfer, speaker output and real F5-TTS still require v
 
 For real recording, the result window shows the downloaded EDF path and byte count. EDF transfer is attempted on normal completion and Escape, retries up to three times, and publishes the file only when the received byte count matches the local file size. A failure shows the Host EDF filename for recovery. Dummy mode never produces an EDF.
 
-Every selected sentence is captured as a full-screen PNG before calibration/recording, using the actual PsychoPy page layout (including the Condition 1 footer). `sentence_pages.csv` maps condition/article/sentence IDs to relative image paths and visible onset/offset intervals; unshown pages stay `not_presented`. Each displayed sentence is one Data Viewer trial with standard image-loading messages. Copy the complete session folder to the analysis computer and import `eyelink.edf`; then use Data Viewer's image auto-segmentation to create AOIs. The experiment does not create AOIs. See [Data Viewer output](docs/data-viewer.md).
+Every selected sentence is captured as a full-screen PNG before calibration/recording, using the actual PsychoPy page layout (including the Condition 1 footer). Words are measured and positioned individually; those same positions generate word AOI files under `interest_areas/`. `word_aois.csv` records each word and its screen rectangle; `aoi_previews/` contains screenshot copies with red AOI outlines for inspection. `sentence_pages.csv` maps each sentence to its image/IAS files and visible interval; unshown pages stay `not_presented`. Each displayed sentence is one Data Viewer trial with image and `!V IAREA FILE` messages. Copy the complete session folder and import `eyelink.edf` to load the prepared word AOIs. Inspect their alignment; Data Viewer image auto-segmentation is not needed. The new word layout can change line wrapping/spacing compared with earlier sessions and does not retrofit old EDFs. See [Data Viewer output](docs/data-viewer.md).
 
 ## Details
 

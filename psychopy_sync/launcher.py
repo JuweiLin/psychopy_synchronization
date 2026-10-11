@@ -37,6 +37,8 @@ def result_message(result):
         details += "\nEyeLink recording did not start; no EDF was created."
     if result.get("screenshots_status") == "saved":
         details += "\nSentence screenshots and Data Viewer image links saved."
+    if result.get("word_aoi_status") == "saved":
+        details += "\nWord interest areas and inspection previews saved."
     if result.get("status") == "completed":
         summary = result["summary"]
         text = f"Reading speed: {summary['speed_per_minute']:.2f} {summary['speed_unit']}\nData saved to: {result['directory']}"

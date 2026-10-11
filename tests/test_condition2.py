@@ -105,6 +105,7 @@ class Condition2Tests(unittest.TestCase):
         self.view.data_viewer = DataViewerExport(self.store)
         for row in self.store.sentences:
             row["screenshot_status"] = "saved"
+            row["ias_status"] = "saved"
         self.view.keyboard.getKeys.return_value = []
         self.prepared = {a.article_id: [MagicMock(name=text) for text in a.pages] for a in self.articles}
         self.playbacks = []

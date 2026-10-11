@@ -13,7 +13,8 @@ from .event_log import validate_participant_id
 
 def session_details(metadata, directory=None):
     fields = ("tts_status", "condition2_status", "dummy_mode", "edf_status", "edf_path", "edf_bytes",
-              "host_edf_name", "edf_error", "screenshots_status", "screenshots_directory", "sentence_index_path")
+              "host_edf_name", "edf_error", "screenshots_status", "screenshots_directory", "sentence_index_path",
+              "word_aoi_status", "word_aoi_index_path", "word_aoi_directory")
     result = {name: metadata[name] for name in fields if name in metadata}
     if directory is not None:
         result["directory"] = str(directory)

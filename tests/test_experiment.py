@@ -3,6 +3,7 @@ import csv
 from dataclasses import replace
 import json
 from pathlib import Path
+import re
 import tempfile
 import types
 import unittest
@@ -68,7 +69,11 @@ class FakeView:
         pass
 
     def prepare(self, articles):
-        return {a.article_id: list(a.pages) for a in articles}
+        return {a.article_id: [types.SimpleNamespace(text=text, word_areas=[
+            dict(word_index=i, line_index=1, word=m.group(), ia_label=f"w{i:04d}",
+                 char_start=m.start(), char_end=m.end(), left=i * 10, top=100,
+                 right=i * 10 + 8, bottom=110)
+            for i, m in enumerate(re.finditer(r"\S+", text), 1)]) for text in a.pages] for a in articles}
 
     def wait_screen(self, text, log, event="WAIT", article_id=""):
         self.win.now += 100  # Long gaps must not enter the reading denominator.
@@ -116,6 +121,8 @@ class ExperimentTests(unittest.TestCase):
                         patch("psychopy_sync.experiment.create_window", return_value=self.win),
                         patch("psychopy_sync.experiment.EyeLinkController", return_value=self.controller),
                         patch("psychopy_sync.experiment.ReadingDisplay", FakeView),
+                        patch("psychopy_sync.data_viewer.save_aoi_preview",
+                              side_effect=lambda image, areas, path: path.write_bytes(b"fake-preview")),
                         patch.object(FakeView, "abort_article", None)):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -442,7 +449,8 @@ class ExperimentTests(unittest.TestCase):
         prepared = view.prepare([article])
         self.assertEqual(tuple(page.text for page in prepared[article.article_id]), article.pages)
         view.text_width = 10
-        with self.assertRaisesRegex(ValueError, "page 1 exceeds"):
+        view.text_height = 1
+        with self.assertRaisesRegex(ValueError, "page 1:"):
             view.prepare([article])
 
     def test_legacy_retina_text_layout_uses_the_same_framebuffer_coordinates_as_eyelink(self):
@@ -463,8 +471,12 @@ class ExperimentTests(unittest.TestCase):
                         "psychopy.hardware.keyboard": types.SimpleNamespace(Keyboard=MagicMock)}):
                     view = ReadingDisplay(self.win, self.config, self.controller)
                 page = view.prepare([article])[article.article_id][0]
-                self.assertEqual(page.options["height"] * scale, self.config.text_height_px)
-                self.assertEqual(page.options["wrapWidth"] * scale, view.text_width)
+                word = page.stimuli[0]
+                self.assertEqual(word.options["height"] * scale, self.config.text_height_px)
+                self.assertEqual(word.options["anchorHoriz"], "left")
+                self.assertEqual(word.options["anchorVert"], "top")
+                self.assertEqual(word.options["units"], "pix")
+                self.assertEqual(len(page.word_areas), len(article.pages[0].split()))
                 self.assertEqual(view.footer.options["pos"][1] * scale, -self.win.size[1] * 0.44)
 
     def test_invalid_reading_intervals_are_rejected(self):

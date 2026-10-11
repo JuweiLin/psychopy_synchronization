@@ -2,6 +2,7 @@
 
 from .condition1 import ExperimentAborted
 from .data_viewer import DataViewerExport
+from .word_layout import WordPage
 
 
 class ReadingDisplay:
@@ -33,27 +34,19 @@ class ReadingDisplay:
         prepared = {}
         scale = self.text_scale
         for article in articles:
-            probe = self.visual.TextStim(self.win, text="", height=self.config.text_height_px / scale,
-                                         font=self.config.font, wrapWidth=self.text_width / scale, autoLog=False)
-
-            def fits(text):
-                probe.text = text
-                width, height = probe.boundingBox
-                return width * scale <= self.text_width and height * scale <= self.text_height
-
-            page_texts = article.pages
-            for index, text in enumerate(page_texts, 1):
-                if not fits(text):
-                    raise ValueError(f"Article {article.title!r}, page {index} exceeds the configured display area; "
-                                     "adjust the prepared CSV page or the text layout")
-            prepared[article.article_id] = [self.visual.TextStim(
-                self.win, text=text, height=self.config.text_height_px / scale, font=self.config.font,
-                wrapWidth=self.text_width / scale, color="white", alignText="left", autoLog=False,
-            ) for text in page_texts]
+            pages = []
+            for index, text in enumerate(article.pages, 1):
+                try:
+                    pages.append(WordPage(self.win, self.visual, self.config, text,
+                                          self.text_width, self.text_height, scale))
+                except ValueError as exc:
+                    raise ValueError(f"Article {article.title!r}, page {index}: {exc}; "
+                                     "adjust the prepared CSV page or the text layout") from exc
+            prepared[article.article_id] = pages
         return prepared
 
     def export_pages(self, store, articles, prepared):
-        self.prompt.text = "Preparing sentence images. Please wait."
+        self.prompt.text = "Preparing sentence images and word interest areas. Please wait."
         self.prompt.draw()
         # Establish the normal post-flip projection/viewport before taking
         # back-buffer captures, including on Retina displays.
