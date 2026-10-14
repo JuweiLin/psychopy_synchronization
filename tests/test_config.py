@@ -48,6 +48,33 @@ class UserConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "condition1_count"):
             module["ExperimentConfig"]()
 
+    def test_tts_cap_limits_fast_reading_and_preserves_slower_reading(self):
+        from psychopy_sync.config import ExperimentConfig
+        for setting, cap in ((True, 210), (190, 190), (205.5, 205.5)):
+            with self.subTest(setting=setting):
+                config = ExperimentConfig(speed_cap=setting)
+                self.assertEqual(config.tts_speed_cap_wpm, cap)
+                self.assertEqual(config.tts_target_wpm(300), cap)
+                self.assertEqual(config.tts_target_wpm(150), 150)
+
+    def test_false_removes_tts_cap(self):
+        from psychopy_sync.config import ExperimentConfig
+        config = ExperimentConfig(speed_cap=False)
+        self.assertIsNone(config.tts_speed_cap_wpm)
+        self.assertEqual(config.tts_target_wpm(300), 300)
+
+    def test_invalid_speed_cap_is_rejected(self):
+        from psychopy_sync.config import ExperimentConfig
+        for value in (0, -1, "210", None, float("nan"), float("inf")):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "speed_cap"):
+                ExperimentConfig(speed_cap=value)
+
+    def test_root_speed_cap_reaches_runtime(self):
+        module = self.load_config('condition1_count = 4\ncondition2_count = 4\n'
+            'eyelink_ip = "100.1.1.1"\ntts_server_url = ""\nspeed_cap = 195\n')
+        config = module["ExperimentConfig"]()
+        self.assertEqual(config.tts_target_wpm(300), 195)
+
 
 if __name__ == "__main__":
     unittest.main()

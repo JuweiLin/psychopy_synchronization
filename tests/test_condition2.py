@@ -86,6 +86,10 @@ class Condition2Tests(unittest.TestCase):
         self.summary = reading_summary(self.store.rows["condition1"], 1)
         self.store.save_speed(self.summary)
         self.audio = SessionAudio(config, self.store, self.articles, self.summary)
+        self.assertEqual(self.summary["speed_per_minute"], 600)
+        self.assertTrue(all(request.target_wpm == 210 for request in self.audio.requests))
+        self.assertEqual(self.store.metadata["reading_speed"]["tts_target_wpm"], 210)
+        self.assertTrue(self.audio.manifest["speed_capped"])
         self.audio.worker = MagicMock()
         self.audio.manifest["status"] = "running"
         self.cached = []
@@ -114,13 +118,17 @@ class Condition2Tests(unittest.TestCase):
         self.speaker = MagicMock()
 
         def begin(text, log, event, article_id, condition):
-            self.win.now += 100  # Excluded from the article interval.
+            timing = {}
+            self.win.timeOnFlip(timing, "timestamp")
+            self.win.callOnFlip(lambda: self.view.data_viewer.end_baseline(log, timing["timestamp"]))
             log.on_flip(self.win, {}, event, condition=condition, article_id=article_id)
             self.win.flip()
+            self.win.now += 100  # Title wait is excluded from baseline and reading.
 
         self.view.wait_screen = begin
         self.view.show_title = lambda article, log, condition: begin(article.title, log, "ARTICLE_WAIT", article.article_id, condition)
         self.view.ask_questions = MagicMock()
+        self.view.ask_feedback = MagicMock()
 
         def preload(cached, allow_demo, speaker):
             self.assertTrue(allow_demo)

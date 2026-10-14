@@ -1,9 +1,10 @@
 """Internal defaults and validation; edit the project's root config.py."""
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union
 from pathlib import Path
 import runpy
+import math
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _USER_SETTINGS = runpy.run_path(str(PROJECT_ROOT / "config.py"))
@@ -61,8 +62,25 @@ class ExperimentConfig:
     text_width_fraction: float = 0.8
     text_height_fraction: float = 0.7
     article_baseline_s: float = 1.5
+    speed_cap: Union[bool, int, float] = _USER_SETTINGS.get("speed_cap", True)
+
+    @property
+    def tts_speed_cap_wpm(self):
+        if self.speed_cap is True:
+            return 210.0
+        if self.speed_cap is False:
+            return None
+        return float(self.speed_cap)
+
+    def tts_target_wpm(self, measured_wpm):
+        cap = self.tts_speed_cap_wpm
+        return min(measured_wpm, cap) if cap is not None else measured_wpm
 
     def __post_init__(self):
+        if (type(self.speed_cap) is not bool and
+                (type(self.speed_cap) not in (int, float) or
+                 not math.isfinite(self.speed_cap) or self.speed_cap <= 0)):
+            raise ValueError("speed_cap must be True (210 WPM), False (no cap), or a positive finite number")
         if type(self.dummy_mode) is not bool:
             raise ValueError("dummy_mode must be True or False")
         if type(self.condition1_count) is not int or self.condition1_count < 1:

@@ -40,9 +40,13 @@ class DataViewerExport:
         win = view.win
         size = tuple(int(value) for value in win.size)
         for row in self.store.auxiliary:
-            page = view.title_pages[row["article_id"]] if row["phase"] == "title" else (
-                view.question_pages[row["article_id"], row["question_order"]])
+            page = (view.title_pages[row["article_id"]] if row["phase"] == "title" else
+                    view.feedback_pages[row["question_order"]] if row["phase"] == "feedback" else
+                    view.question_pages[row["article_id"], row["question_order"]])
             areas = page.word_areas if row["phase"] == "title" else page.interest_areas
+            if row["phase"] == "feedback":
+                page.reset([question["question_id"] for question in self.store.question_rows
+                            if question["condition"] == row["condition"] and question["article_id"] == row["article_id"]])
             image_path = self.store.directory / row["screenshot_path"]
             ias_path = self.store.directory / row["ias_path"]
             preview_path = self.store.directory / row["aoi_preview_path"]
@@ -167,13 +171,14 @@ class DataViewerExport:
                 self._message(log, row, "DV_TRIAL_VAR", f"!V TRIAL_VAR {name} {value}", timestamp)
 
     def _question_variables(self, log, row, timestamp):
-        question = row.get("phase") == "question"
+        question = row.get("phase") in ("question", "feedback")
         for name, value in (("question_id", row["question_id"] if question else "none"),
                             ("question_order", row["question_order"] if question else 0),
                             ("selected_answer", "none")):
             self._message(log, row, "DV_TRIAL_VAR", f"!V TRIAL_VAR {name} {value}", timestamp)
 
     def start_auxiliary(self, log, condition, article_id, item_id, timestamp):
+        self.end_baseline(log, timestamp)
         self.end_auxiliary(log, timestamp)
         row = self.auxiliary[condition, article_id, item_id]
         if row["screenshot_status"] != "saved" or row["ias_status"] != "saved":
@@ -188,7 +193,7 @@ class DataViewerExport:
         self._message(log, row, "DV_TRIAL_VAR", "!V TRIAL_VAR sentence_index 0", timestamp)
         self._message(log, row, "DV_IMAGE", f"!V IMGLOAD FILL {row['screenshot_path']}", timestamp)
         self._message(log, row, "DV_AOI", f"!V IAREA FILE {row['ias_path']}", timestamp)
-        marker = "TITLE_START" if row["phase"] == "title" else f"QUESTION_START {row['question_id']}"
+        marker = "TITLE_START" if row["phase"] == "title" else f"{row['phase'].upper()}_START {row['question_id']}"
         event = self._message(log, row, row["phase"].upper() + "_START", marker, timestamp)
         row.update(start_event_id=event["event_id"], start_timestamp_s=timestamp)
 
@@ -196,7 +201,7 @@ class DataViewerExport:
         row = self.active_auxiliary
         if row is None:
             return
-        marker = "TITLE_END" if row["phase"] == "title" else f"QUESTION_END {row['question_id']}"
+        marker = "TITLE_END" if row["phase"] == "title" else f"{row['phase'].upper()}_END {row['question_id']}"
         event = self._message(log, row, row["phase"].upper() + "_END", marker, timestamp)
         self._message(log, row, "DV_TRIAL_END", "TRIAL_RESULT 0" if status == "completed" else "TRIAL_RESULT 1", timestamp)
         row.update(status=status, end_event_id=event["event_id"], end_timestamp_s=timestamp,
@@ -204,6 +209,7 @@ class DataViewerExport:
         self.active_auxiliary = None
 
     def start_page(self, log, condition, article_id, index, timestamp):
+        self.end_auxiliary(log, timestamp)
         self.end_baseline(log, timestamp)
         self.end_page(log, timestamp)
         row = self.pages[condition, article_id, index]

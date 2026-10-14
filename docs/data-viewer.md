@@ -43,9 +43,20 @@ In both conditions, each article starts with one central white `+` on the same b
 
 ## Data Viewer import
 
+Each article's fixation trial ends on the first title flip. The title trial
+ends on the first body flip: there is no fixation between title and body.
+After the comprehension questions, five fixed feedback trials use
+`phase=feedback`, `question_id=F01` through `F05`, and `question_order=1` through
+`5`. Their `FEEDBACK_START`, `FEEDBACK_RESPONSE` and `FEEDBACK_END` messages
+identify the feedback item. Initial form images and control AOIs are indexed in
+`auxiliary_pages.csv`; the selected rating/choice and exact notes are saved in
+`article_feedback.csv`. The screenshot is the blank form, not a capture of typed
+responses or the final slider position. Feedback intervals are excluded from
+reading speed and TTS. See [feedback fields and timing](questions.md#fixed-article-feedback).
+
 Each body/title page is laid out as individual word TextStim objects. The program measures the chosen font, places words from left to right, and wraps between whitespace tokens when the configured width is reached. Explicit line breaks are retained. Each line is horizontally centered, and the text block is vertically centered. The same positions generate its AOIs. This layout is recorded as `centered_word_textstim_v2`; older sessions keep their original screenshots and coordinates. Each body CSV cell remains one trial; oversized words and overflowing pages fail preparation rather than creating additional pages.
 
-An article now has a separate title trial before its baseline, and question trials after its body. `phase=title` displays the CSV header without audio; `phase=question` displays one question and four answer buttons, with `question_id`, `question_order` and `selected_answer` trial variables. `TITLE_START`/`TITLE_END` and `QUESTION_START <id>`/`QUESTION_END <id>` mark their visible intervals. `QUESTION_RESPONSE <id> <letter>` marks the observed mouse response. `auxiliary_pages.csv` maps these trials to their screenshots, IAS files and timing. Question IAS files contain four button AOIs labelled `option_A`–`option_D`. Filter by `phase` for reading/pupil analyses; neither titles nor questions enter reading-speed calculations.
+An article has a separate title trial after its baseline, and question trials after its body. `phase=title` displays the CSV header without audio; `phase=question` displays one question and four answer buttons, with `question_id`, `question_order` and `selected_answer` trial variables. `TITLE_START`/`TITLE_END` and `QUESTION_START <id>`/`QUESTION_END <id>` mark their visible intervals. `QUESTION_RESPONSE <id> <letter>` marks the observed mouse response. `auxiliary_pages.csv` maps these trials to their screenshots, IAS files and timing. Question IAS files contain four button AOIs labelled `option_A`–`option_D`. Filter by `phase` for reading/pupil analyses; neither titles nor questions enter reading-speed calculations.
 
 The same positions generate word AOI rectangles. Each whitespace token is one AOI, including attached punctuation (`don't`, `sentence.`). IDs restart at 1 per page; repeated words have distinct IDs. Labels contain the word index and text, with non-ASCII characters escaped. `word_aois.csv` retains the exact word, line number, ID/label, zero-based/end-exclusive character offsets, coordinates and links to the trial, screenshot and IAS file. Coordinates are integer framebuffer pixels with an upper-left origin and inclusive right/bottom edges. Two-pixel padding is limited at the midpoint of each adjacent word gap to avoid overlap. Keyboard instructions have no AOIs.
 
@@ -53,7 +64,7 @@ The same positions generate word AOI rectangles. Each whitespace token is one AO
 
 1. Copy the **whole session folder**, preserving the EDF, `screenshots/` and `interest_areas/` hierarchy.
 2. Import `eyelink.edf` into EyeLink Data Viewer. Images are referenced relative to that EDF's location. If the software asks for an image directory, point it to the copied session folder and keep the relative hierarchy intact.
-3. Each article has one baseline trial followed by one trial per body page. Trial variables `condition`, `article_id`, `sentence_index` and `phase` identify each trial; the existing `sentence_index` names the supplied page even when it contains multiple sentences. Baselines have `phase=baseline` and `sentence_index=0`; pages have `phase=reading`. `participant_id`, `instruction_group`, `allocation_slot` and `list_id` record the frozen assignment. Join baseline and reading results within participant/session by condition and article ID.
+3. Each article has one baseline trial, a title trial, one trial per body page, comprehension-question trials and five feedback trials. Trial variables `condition`, `article_id`, `sentence_index` and `phase` identify each trial; the existing `sentence_index` names the supplied page even when it contains multiple sentences. Baselines have `phase=baseline` and `sentence_index=0`; pages have `phase=reading`. `participant_id`, `instruction_group`, `allocation_slot` and `list_id` record the frozen assignment. Join baseline and reading results within participant/session by condition and article ID.
 4. Inspect the background screenshot and gaze overlay. Confirm text and gaze use the same screen coordinates.
 5. Word AOIs load through the trial's `!V IAREA FILE` message. Enable interest-area outlines in the Spatial Overlay view and inspect them against the words. There is no need to use **Auto Segment Image into Interest Areas**. Compare `aoi_previews/` and `word_aois.csv` if anything looks misplaced. Older EDFs without the IAS message still need manual association of compatible AOI files or Data Viewer's segmentation tools; updating the program does not add AOIs to old recordings.
 6. Export the required fixation, interest-area or sample reports from Data Viewer. These reports are analysis outputs; the experiment itself saves the raw EDF and event/page tables.

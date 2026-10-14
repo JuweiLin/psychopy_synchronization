@@ -13,13 +13,13 @@ def run_condition1(view, articles, prepared, log, store):
     for article, row in zip(articles, store.rows["condition1"]):
         pages = prepared[article.article_id]
         row["page_count"] = len(pages)
-        view.show_title(article, log, "condition1")
         row["status"] = "presenting"
         store.save()
         start, end = {}, {}
         try:
             log.emit("TRIAL_START", "condition1", article.article_id)
             view.show_baseline(log, "condition1", article.article_id)
+            view.show_title(article, log, "condition1")
             for page_index, page in enumerate(pages, 1):
                 onset = start if page_index == 1 else {}
                 view.read_page(page, log, onset, "ARTICLE_ONSET" if page_index == 1 else "PAGE_ONSET",
@@ -32,6 +32,7 @@ def run_condition1(view, articles, prepared, log, store):
                        **store.article_durations("condition1", article.article_id))
             store.save()
             view.ask_questions(article, log, store, "condition1")
+            view.ask_feedback(article, log, store, "condition1")
         except BaseException as exc:
             if row["status"] != "completed":
                 row["status"] = "aborted" if isinstance(exc, ExperimentAborted) else "failed"

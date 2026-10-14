@@ -26,11 +26,11 @@ Use an ID from **1–200** for real device testing. The remaining recording sequ
 
 Each `assets/articles/<article_id>.csv` has one column. Its first cell is the title; each following nonempty cell is one sentence/page. CSV quoting preserves commas and embedded newlines. Empty cells are skipped. The code does not split sentences or repaginate the supplied pages.
 
-Article IDs are filename stems: 1–32 ASCII letters, digits, `_` or `-`. Case-insensitive duplicate IDs are rejected; duplicate titles are allowed. The first CSV cell is displayed as a separate centered title page before the baseline. It does not count toward reading word count/duration or TTS. Every body line is horizontally centered, and the complete text block is vertically centered. Screenshots and word AOIs follow the same positions.
+Article IDs are filename stems: 1–32 ASCII letters, digits, `_` or `-`. Case-insensitive duplicate IDs are rejected; duplicate titles are allowed. The first CSV cell is displayed as a separate centered title page after the baseline. It does not count toward reading word count/duration or TTS. Every body line is horizontally centered, and the complete text block is vertically centered. Screenshots and word AOIs follow the same positions.
 
 Formal IDs map directly to the frozen rows of `assets/user_assignments.csv`: 1 → R001 through 200 → R200. Every row contains an instruction group (SYNC/FLEX), list ID and four ordered article IDs for each condition. The program loads that order without another random draw. Each formal participant has eight different articles and two low/two high readability articles per condition. ID 0 uses the separate smaller random draw described above. Group-specific instruction text is pending; both groups currently use the common prompt and the same playback behavior.
 
-`assets/articles/` contains the twelve articles extracted from the pilot workbook. The original body Screen boundaries and hard line breaks are preserved; a page is not necessarily a single sentence. The title Screen becomes the CSV header. Six selected questions per article are now in `assets/questions/<article_id>.csv`; feedback/rating fields remain excluded. `assets/stimulus_import.json` records source checksums and the Screen-to-page mapping; `assets/questions/import_manifest.json` documents answer verification. The study still estimates speed from Condition 1; this import does not add the planning document's separate pre-block VO speed calibration.
+`assets/articles/` contains the twelve articles extracted from the pilot workbook. The original body Screen boundaries and hard line breaks are preserved; a page is not necessarily a single sentence. The title Screen becomes the CSV header. Six selected questions per article are now in `assets/questions/<article_id>.csv`; five fixed feedback prompts follow the comprehension questions. `assets/stimulus_import.json` records source checksums and the Screen-to-page mapping; `assets/questions/import_manifest.json` documents answer verification. The study still estimates speed from Condition 1; this import does not add the planning document's separate pre-block VO speed calibration.
 
 ## Session sequence
 
@@ -39,17 +39,17 @@ Formal IDs map directly to the frozen rows of `assets/user_assignments.csv`: 1 �
 3. Configure and run EyeLink calibration. The default is HV9 with automatic calibration start and 1000 ms pacing.
 4. Open the Host EDF and start one continuous recording. Calibration itself is outside this EDF recording.
 5. Show the operator confirmation screen. Verify calibration/validation on the Host before pressing Space.
-6. Run Condition 1. Display the title until Space, then show one central `+` baseline for 1500 ms and the first body page. Space advances each page and ends the last page. Pages within the article have no additional baselines. After the body ends, present that article's questions in order with four mouse-click answer buttons, without showing the article or correctness feedback.
-7. After every Condition 1 article is completed, compute and save reading speed.
+6. Run Condition 1. Show one central `+` baseline for 1500 ms, then the title until Space, followed directly by the first body page. Space advances each page and ends the last page. Pages within the article have no additional baselines. After the body ends, present that article's questions in order with four mouse-click answer buttons, without showing the article or correctness feedback. Then collect five fixed article feedback answers.
+7. After all Condition 1 articles, comprehension questions and feedback are completed, compute and save reading speed.
 8. Create the participant/session TTS directory and submit every selected Condition 2 sentence in background HTTP batches of at most 100. GPU generation is queued in article/sentence order.
-9. Wait only for the next article's complete set of verified local WAVs, then preload them on the main thread. Show its title until Space, show one 1500 ms `+` baseline, then display its first body page and schedule the matching WAV using PTB. Automatically advance subsequent pages after audio completion, without extra baselines. Ask the article's button questions after the body ends. Later articles continue generating/downloading in the background. Repeat for each Condition 2 article.
+9. Wait only for the next article's complete set of verified local WAVs, then preload them on the main thread. Show one 1500 ms `+` baseline, then its title until Space, then display its first body page and schedule the matching WAV using PTB. Automatically advance subsequent pages after audio completion, without extra baselines. Ask the article's button questions and then five fixed feedback questions after the body ends. Later articles continue generating/downloading in the background. Repeat for each Condition 2 article.
 10. Stop recording after both conditions, close and download the EDF in real mode, and close the experiment window. The login window returns with the reading speed, data directory and verified EDF path/byte count or recovery filename.
 
 With no service URL, Condition 2 is explicitly skipped, its article rows remain `not_presented`, and requests/index files are saved as `not_configured`.
 
 ## Timing and messages
 
-Each article has one fixed-duration baseline before its first sentence, in both real and dummy mode. The white cross uses the reading screen's black background. This keeps the background/color scheme constant; it does not equalize total screen luminance between a cross and text. The baseline is a timed display, with no gaze-contingent fixation gate. Space cannot shorten it; Escape can stop the session. The actual duration is bounded by refresh timing and processing, and both ends are saved from real flips.
+Each article has one fixed-duration baseline before its title, in both real and dummy mode. The white cross uses the reading screen's black background. This keeps the background/color scheme constant; it does not equalize total screen luminance between a cross and text. The baseline is a timed display, with no gaze-contingent fixation gate. Space cannot shorten it; Escape can stop the session. The actual duration is bounded by refresh timing and processing, and both ends are saved from real flips.
 
 `BASELINE_START` occurs on the cross's first flip. `BASELINE_END`, `PASSAGE_START` and the first `SENTENCE_START` occur on the flip that replaces the cross with the first sentence. `SENTENCE_END` occurs on the flip that replaces that sentence. `PASSAGE_END` occurs on the final removal flip, before closing its Data Viewer trial. `CONDITION_START`/`CONDITION_END` identify the conditions. `SENTENCE_ONSET`/`SENTENCE_OFFSET` are retained as aliases. Baseline, passage, sentence and audio markers are unprefixed for Data Viewer message-based analysis; identity is available in trial variables and the local log columns.
 
@@ -70,6 +70,12 @@ WPM = 60 * total_word_count / total_reading_s
 English words are counted using whitespace-separated tokens. `reading_duration_s` sums the visible sentence intervals and excludes the pre-article baseline and between-article waits. `elapsed_duration_s` is the first-sentence-onset to last-sentence-offset interval. `baseline_duration_s` and paired baseline timestamps are saved separately in the condition table. Condition 2 reading durations never contribute to Condition 1 WPM. The final speed uses total words divided by total effective reading time, not the mean of individual article speeds.
 
 Titles and question intervals are also excluded. `question_responses.csv` records selected letters/text, correctness and response time from the question's first flip to the observed fresh mouse press. `auxiliary_pages.csv` records title/question visible intervals and image/AOI associations. Completed reading intervals stay completed if the participant subsequently stops during questions; unanswered questions retain their own status. See [question schema and responses](questions.md).
+
+The five fixed article feedback pages are also excluded. `article_feedback.csv`
+records each continuous rating, No/Yes/Unsure answer, typed note and response time
+from that feedback page's first flip to the observed Continue click. Feedback
+uses separate `phase=feedback` trials, initial-form screenshots and control AOIs.
+`FEEDBACK_START`, `FEEDBACK_RESPONSE` and `FEEDBACK_END` carry IDs F01–F05.
 
 Eye samples, including gaze and pupil area, are stored in EDF. `user_logs.csv` contains events, not individual eye samples. Continuous recording includes the confirmation screen, article waits, reading, configured TTS preparation and Condition 2 playback. Holding Space across screens does not automatically advance the next screen.
 
@@ -102,7 +108,7 @@ assets/TTS/<participant_id>/<session_id>/
     sentence_0002.json
 ```
 
-A nonempty CSV sentence/page corresponds to one WAV. Numbering starts at 1 and matches page order. Repeated text at different sentence indices is kept as separate requests/files. Each target duration is `60 × sentence word count / participant WPM`.
+A nonempty CSV sentence/page corresponds to one WAV. Numbering starts at 1 and matches page order. Repeated text at different sentence indices is kept as separate requests/files. Each target duration is `60 × sentence word count / target WPM`. Target WPM is the measured reading speed limited by root `speed_cap`: True = 210, False = no cap, or a positive numeric WPM limit. Raw reading speed is preserved. `reading_speed.csv`, the TTS index and manifest record the target and whether it was capped. Audio onset debug uses its explicitly requested speeds without this cap.
 
 The sentence index contains participant/session/article IDs, sentence index, source CSV record number, exact sentence text, word count, target WPM/duration, audio status, actual WAV path, planned WAV path, job ID, actual duration/WPM, checksum and error. `audio_path` stays empty until a WAV is successfully downloaded and verified. `planned_audio_path` does not assert file existence.
 

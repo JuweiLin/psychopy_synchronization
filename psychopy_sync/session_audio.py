@@ -11,6 +11,7 @@ INDEX_FIELDS = ["participant_id", "session_id", "article_id", "sentence_index", 
                 "text", "word_count", "target_wpm", "target_duration_s", "audio_status",
                 "audio_path", "planned_audio_path", "job_id", "duration_s", "actual_wpm",
                 "audio_sha256", "error"]
+INDEX_FIELDS += ["measured_reading_wpm", "speed_cap_wpm", "speed_capped"]
 
 
 class SessionAudio:
@@ -33,26 +34,32 @@ class SessionAudio:
         self.cached = {}
         self.rows = {row["article_id"]: row for row in store.rows["condition2"]}
         self.requests, sentences = [], []
+        measured_wpm = summary["speed_per_minute"]
+        target_wpm = config.tts_target_wpm(measured_wpm)
+        speed_policy = dict(measured_reading_wpm=measured_wpm,
+                            speed_cap_wpm=config.tts_speed_cap_wpm,
+                            speed_capped=target_wpm < measured_wpm)
         for article in articles:
             for index, (text, source_row) in enumerate(zip(article.pages, article.source_rows), 1):
                 request = GenerationRequest(
                     session_id=store.session_id, participant_id=store.participant_id,
                     article_id=article.article_id, sentence_index=index, text=text,
-                    word_count=len(text.split()), target_wpm=summary["speed_per_minute"],
+                    word_count=len(text.split()), target_wpm=target_wpm,
                 )
                 self.requests.append(request)
                 planned_path = self.directory / article.article_id / f"sentence_{index:04d}.wav"
                 sentences.append(dict(request.identity(), source_row=source_row, text=text,
                                       audio_status="pending", job_id="", path="",
-                                      planned_audio_path=str(planned_path), error=""))
+                                      planned_audio_path=str(planned_path), error="", **speed_policy))
             self.rows[article.article_id]["audio_index_path"] = str(self.index_path)
         self.manifest = dict(participant_id=store.participant_id, session_id=store.session_id,
                              dummy_mode=config.dummy_mode,
-                             server=config.tts_server_url, target_wpm=summary["speed_per_minute"],
+                             server=config.tts_server_url, target_wpm=target_wpm, **speed_policy,
                              granularity="sentence", status="prepared", sentences=sentences)
         self.entries = {(entry["article_id"], entry["sentence_index"]): entry for entry in sentences}
         self._write_json(self.directory / "requests.json", {"articles": [r.to_dict() for r in self.requests]})
         store.metadata.update(tts_directory=str(self.directory), tts_index_path=str(self.index_path))
+        store.metadata["tts_speed_policy"] = dict(target_wpm=target_wpm, **speed_policy)
         self._save()
 
     @staticmethod

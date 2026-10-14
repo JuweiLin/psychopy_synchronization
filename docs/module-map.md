@@ -12,7 +12,7 @@ The experiment measures Condition 1 reading speed, then presents Condition 2 sen
 | `psychopy_sync/launcher.py` | English numeric ID form; ID 0 selects dummy mode; asynchronous GPU checks, dependency checks and results |
 | `psychopy_sync/server_check.py` | Bounded readiness requests, protocol/mode checks and readable connection failures |
 | `psychopy_sync/desktop_runner.py` | Runs the experiment in a separate process and returns its outcome to the form |
-| `config.py` | Four editable settings: condition counts, tracker IP and GPU URL |
+| `config.py` | Five editable settings: condition counts, tracker IP, GPU URL and TTS speed cap |
 | `psychopy_sync/config.py` | Loads root settings; keeps internal defaults and validation |
 | `psychopy_sync/experiment.py` | Calibration → continuous recording → Condition 1 → speed → background TTS → Condition 2 playback → cleanup |
 | `psychopy_sync/assignments.py`, `assets/user_assignments.csv` | Frozen mapping from IDs 1–200 to SYNC/FLEX and ordered article lists; ID 0 bypasses the table for a 1+2 random draw |
@@ -23,6 +23,7 @@ The experiment measures Condition 1 reading speed, then presents Condition 2 sen
 | `psychopy_sync/word_layout.py` | Measures and positions word TextStim objects; produces matching word AOI rectangles and IAS text |
 | `psychopy_sync/questions.py`, `assets/questions/` | One question CSV per article; validates identities, fixed order, options and correct letters |
 | `psychopy_sync/question_display.py` | Centered question pages and four clickable answer buttons with matching AOIs |
+| `psychopy_sync/feedback.py` | Five fixed post-article feedback prompts, continuous 1–4 sliders, choice buttons, editable notes and per-item timing |
 | `scripts/import_questions.py` | Extracts pilot questions and remaps official answer texts to the pilot's shuffled choices, recording provenance |
 | `psychopy_sync/condition1.py` | Runs articles, pairs onset/end events and saves complete reading speed |
 | `psychopy_sync/condition2.py` | Waits/preloads each article, presents sentence text/audio and saves complete/partial presentation timing |

@@ -71,9 +71,12 @@ class FakeView:
     def ask_questions(self, article, log, store, condition):
         pass
 
+    def ask_feedback(self, article, log, store, condition):
+        pass
+
     def show_title(self, article, log, condition):
-        self.win.now += 100
         self.data_viewer.start_auxiliary(log, condition, article.article_id, "title", self.win.now)
+        self.win.now += 100
         self.win.now += 2  # Title duration must stay outside the reading denominator.
         log.flush()
 
@@ -102,8 +105,8 @@ class FakeView:
 
     def show_baseline(self, log, condition, article_id):
         self.data_viewer.start_baseline(log, condition, article_id, self.win.now)
-        # The fake read_page contributes the remaining second before its flip.
-        self.win.now += 0.5
+        # The title's first flip ends this baseline before any title wait.
+        self.win.now += 1.5
 
     def clear_article(self, log, end, event, article_id, **kwargs):
         self.win.now += 10

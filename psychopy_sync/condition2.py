@@ -29,12 +29,12 @@ def run_condition2(view, articles, prepared, audio, log, store):
                 log.emit("ARTICLE_AUDIO_READY", "condition2", article.article_id,
                          detail=f"{len(sounds)} sentences preloaded")
                 log.flush()
-                view.show_title(article, log, "condition2")
                 row["status"] = "presenting"
                 store.save()
                 log.emit("TRIAL_START", "condition2", article.article_id)
                 presentation_started = True
                 view.show_baseline(log, "condition2", article.article_id)
+                view.show_title(article, log, "condition2")
                 for page_index, (page, playback, sentence) in enumerate(zip(pages, sounds, cached), 1):
                     view.play_page(page, playback, sentence, log, start, article.article_id, page_index)
                 view.clear_article(log, end, "ARTICLE_END", article.article_id,
@@ -45,6 +45,7 @@ def run_condition2(view, articles, prepared, audio, log, store):
                            **store.article_durations("condition2", article.article_id))
                 store.save()
                 view.ask_questions(article, log, store, "condition2")
+                view.ask_feedback(article, log, store, "condition2")
             except BaseException as exc:
                 if row["status"] != "completed":
                     row["status"] = "aborted" if isinstance(exc, ExperimentAborted) else "failed"

@@ -12,6 +12,8 @@ from pathlib import Path
 import re
 import uuid
 
+from .feedback import FEEDBACK_ITEMS
+
 ARTICLE_FIELDS = ["participant_id", "session_id", "condition", "order", "article_id", "title", "path",
                   "source_rows", "source_sha256", "text_sha256", "pages_sha256",
                   "count_mode", "unit_count", "status", "page_count",
@@ -29,6 +31,7 @@ LOG_FIELDS = ["participant_id", "session_id", "event_id", "event", "condition", 
 USER_FIELDS = ["participant_id", "created_at_utc"] + ASSIGNMENT_FIELDS
 SPEED_FIELDS = ["participant_id", "session_id", "article_count", "total_units", "count_mode",
                 "total_reading_s", "speed_per_minute", "speed_unit", "timing_source"]
+SPEED_FIELDS += ["tts_speed_cap_wpm", "tts_target_wpm", "tts_speed_capped"]
 SENTENCE_FIELDS = ["participant_id", "session_id", "condition", "article_id", "sentence_index",
                    "source_row", "text", "trial_id", "screenshot_path", "screenshot_status",
                    "screenshot_sha256", "width_px", "height_px", "ias_path", "ias_status",
@@ -44,6 +47,10 @@ AUXILIARY_FIELDS = ["participant_id", "session_id", "condition", "article_id", "
 QUESTION_RESPONSE_FIELDS = ["participant_id", "session_id", "condition", "article_id", "question_id", "question_order",
     "content", "OptionA", "OptionB", "OptionC", "OptionD", "CorrectAnswer", "source_path", "source_sha256",
     "status", "selected_answer", "selected_text", "is_correct", "start_event_id", "end_event_id",
+    "start_timestamp_s", "end_timestamp_s", "response_event_id", "response_timestamp_s", "response_time_s"] + ASSIGNMENT_FIELDS
+FEEDBACK_RESPONSE_FIELDS = ["participant_id", "session_id", "condition", "article_id", "question_id", "question_order",
+    "content", "response_kind", "scale_min", "scale_max", "low_label", "high_label", "note_prompt",
+    "status", "rating", "selected_answer", "response_text", "start_event_id", "end_event_id",
     "start_timestamp_s", "end_timestamp_s", "response_event_id", "response_timestamp_s", "response_time_s"] + ASSIGNMENT_FIELDS
 
 
@@ -85,6 +92,7 @@ def validate_login_participant_id(participant_id):
 
 class SessionStore:
     def __init__(self, config, participant_id, articles, session_id=None, assignment=None, questions=None):
+        self.config = config
         validate_participant_id(participant_id)
         self.participant_id = participant_id
         assignment_fields = {name: "" for name in ASSIGNMENT_FIELDS}
@@ -128,8 +136,21 @@ class SessionStore:
             migrate_users = True
         if migrate_users:
             write_csv(users_path, USER_FIELDS, users)
-        if not (self.root / "reading_speed.csv").exists():
-            write_csv(self.root / "reading_speed.csv", SPEED_FIELDS, [])
+        speed_path = self.root / "reading_speed.csv"
+        if not speed_path.exists():
+            write_csv(speed_path, SPEED_FIELDS, [])
+        else:
+            old_speeds = None
+            with speed_path.open(encoding="utf-8-sig", newline="") as stream:
+                reader = csv.DictReader(stream)
+                if reader.fieldnames != SPEED_FIELDS:
+                    if (not set(SPEED_FIELDS[:9]).issubset(reader.fieldnames or []) or
+                            not set(reader.fieldnames or []).issubset(SPEED_FIELDS)):
+                        raise ValueError("Unsupported reading_speed.csv columns; preserve and review the existing table")
+                    # Retain old measurements and leave the new policy fields blank.
+                    old_speeds = [{field: row.get(field, "") for field in SPEED_FIELDS} for row in reader]
+            if old_speeds is not None:
+                write_csv(speed_path, SPEED_FIELDS, old_speeds)
         self.rows = {}
         for condition, selected in articles.items():
             self.rows[condition] = [dict(
@@ -158,7 +179,7 @@ class SessionStore:
             "dummy_random_pool" if config.dummy_mode else "random_pool")
         self.metadata.update(edf_path="", edf_bytes=0,
                              edf_expected_path=str((self.directory / "eyelink.edf").resolve()),
-                             dataviewer_trial_unit="title_baseline_reading_question", screenshots_status="pending",
+                             dataviewer_trial_unit="baseline_title_reading_question_feedback", screenshots_status="pending",
                              screenshots_directory=str((self.directory / "screenshots").resolve()),
                              sentence_index_path=str((self.directory / "sentence_pages.csv").resolve()),
                              word_aoi_status="pending", word_aoi_unit="whitespace_token",
@@ -177,10 +198,14 @@ class SessionStore:
         self.words = []
         self.auxiliary = []
         self.question_rows = []
-        self.metadata.update(title_handling="first CSV cell displayed before baseline; excluded from TTS and WPM",
+        self.feedback_rows = []
+        self.metadata.update(title_handling="first CSV cell displayed after baseline; excluded from TTS and WPM",
+            baseline_position="before_title",
             page_alignment="each line horizontally centered; text block vertically centered",
             question_timing="after each article; excluded from WPM; no correctness feedback",
-            questions_status="not_presented" if questions else "not_configured")
+            questions_status="not_presented" if questions else "not_configured",
+            feedback_status="not_presented", feedback_timing="after article questions; excluded from WPM and TTS",
+            response_time_method="question onset flip to observed answer/Continue mouse press, seconds")
         for condition, selected in articles.items():
             for article in selected:
                 items = [("title", "title", "", 0, article.title)]
@@ -195,6 +220,19 @@ class SessionStore:
                         CorrectAnswer=question.correct_answer, source_path=question.source_path,
                         source_sha256=question.source_sha256, status="not_presented", selected_answer="", selected_text="",
                         is_correct="", start_event_id="", end_event_id="", start_timestamp_s="", end_timestamp_s="",
+                        response_event_id="", response_timestamp_s="", response_time_s="", **assignment_fields))
+                for item in FEEDBACK_ITEMS:
+                    text = item.content + "\n" + item.note_prompt
+                    if item.kind == "slider":
+                        text += f"\n1: {item.low_label}; 4: {item.high_label}"
+                    items.append(("feedback", f"f{item.order:03d}", item.question_id, item.order, text))
+                    self.feedback_rows.append(dict(participant_id=participant_id, session_id=self.session_id,
+                        condition=condition, article_id=article.article_id, question_id=item.question_id,
+                        question_order=item.order, content=item.content, response_kind=item.kind,
+                        scale_min=1 if item.kind == "slider" else "", scale_max=4 if item.kind == "slider" else "",
+                        low_label=item.low_label, high_label=item.high_label, note_prompt=item.note_prompt,
+                        status="not_presented", rating="", selected_answer="", response_text="",
+                        start_event_id="", end_event_id="", start_timestamp_s="", end_timestamp_s="",
                         response_event_id="", response_timestamp_s="", response_time_s="", **assignment_fields))
                 for phase, item_id, question_id, question_order, text in items:
                     name = f"{condition}/{article.article_id}/{item_id}"
@@ -253,6 +291,7 @@ class SessionStore:
         write_csv(self.directory / "word_aois.csv", WORD_AOI_FIELDS, self.words)
         write_csv(self.directory / "auxiliary_pages.csv", AUXILIARY_FIELDS, self.auxiliary)
         write_csv(self.directory / "question_responses.csv", QUESTION_RESPONSE_FIELDS, self.question_rows)
+        write_csv(self.directory / "article_feedback.csv", FEEDBACK_RESPONSE_FIELDS, self.feedback_rows)
         temporary = self.directory / "session.json.tmp"
         temporary.write_text(json.dumps(self.metadata, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         temporary.replace(self.directory / "session.json")
@@ -267,7 +306,11 @@ class SessionStore:
     def save_speed(self, summary):
         if "reading_speed" in self.metadata:
             raise RuntimeError("Reading speed has already been saved")
-        row = dict(participant_id=self.participant_id, session_id=self.session_id, **summary)
+        measured = summary["speed_per_minute"]
+        target = self.config.tts_target_wpm(measured)
+        row = dict(participant_id=self.participant_id, session_id=self.session_id, **summary,
+                   tts_speed_cap_wpm=self.config.tts_speed_cap_wpm,
+                   tts_target_wpm=target, tts_speed_capped=target < measured)
         append_csv(self.root / "reading_speed.csv", SPEED_FIELDS, row)
         self.metadata["reading_speed"] = row
         self.save()

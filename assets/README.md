@@ -14,8 +14,8 @@ completed readings are recorded separately in each session's condition tables.
 
 `articles/` contains one UTF-8 CSV per study article. The first cell is the title
 and subsequent cells are the workbook's body Screens, preserving page order and
-hard line breaks. The title appears as its own centered title page, followed by
-the 1500 ms baseline and body pages. It is excluded from WPM and TTS. A body page
+hard line breaks. A 1500 ms baseline appears before the centered title page;
+Space on the title starts the body pages directly. It is excluded from WPM and TTS. A body page
 may contain several sentences and produces one WAV. Body lines are centered and
 their text block is vertically centered.
 
@@ -26,8 +26,9 @@ one file per article. The nine columns are `article_id`, `question_id`,
 letter A–D. Original IDs such as `A02_P01_Q2` already include the article ID.
 The supplied twelve files have six questions each. Add a matching question CSV
 when adding an article. `questions/import_manifest.json` records answer-key
-provenance and source/pilot spelling differences. Pilot feedback fields are
-omitted. Questions are shown after each article, with mouse-click answer buttons.
+provenance and source/pilot spelling differences. Questions are shown after each
+article, with mouse-click answer buttons, followed by five fixed feedback prompts
+defined in `psychopy_sync/feedback.py`; no feedback asset table is needed.
 
 `stimulus_import.json` records original file hashes, exported CSV hashes, word
 counts and the original Screen IDs/Excel row numbers for each body page. The

@@ -21,26 +21,37 @@ PsychoPy-managed packages are loaded in the runtime check, login and experiment 
 
 ## Configure
 
-Edit only [config.py](config.py) in the project root before launching. It contains four settings:
+Edit only [config.py](config.py) in the project root before launching. It contains five settings:
 
 ```python
 condition1_count = 4
 condition2_count = 4
 eyelink_ip = "100.1.1.1"
 tts_server_url = "http://192.168.137.2:8765"
+speed_cap = True
 ```
+
+`speed_cap = True` limits the Condition 2 TTS target to **210 WPM**.
+`speed_cap = False` disables the cap. A positive number, such as
+`speed_cap = 190`, uses that WPM limit: the target is `min(measured WPM, cap)`.
+A participant reading at 180 WPM therefore keeps 180 WPM with a 210 cap.
+Actual reading speed is never overwritten. `reading_speed.csv` records
+`tts_speed_cap_wpm`, `tts_target_wpm` and `tts_speed_capped`; existing rows keep
+their original measurements and gain blank policy fields. The TTS manifest and
+index also record the speed policy. The separate Audio Onset Debug interface
+always uses the speeds entered there, allowing tests above the experiment cap.
 
 With ID **0**, the experiment skips the EyeLink connection, calibration, recording, package checks and EDF transfer. It keeps reading, flip timestamps, WPM, CSV logs and configured Condition 2 audio playback. IDs **1–200** use the real EyeLink setup. The login and ready screen identify dummy mode in English.
 
 The imported frozen schedule requires both formal article counts to remain **4**; changing them requires a matching new schedule. ID 0 overrides these counts to **1 and 2** automatically. Set `eyelink_ip` to the tracker address for real recording. Leave `tts_server_url` empty for a reading-only session, or fill in the GPU service origin. Audio onset debug requires a configured, ready F5-TTS server and rejects demo silence. Save the file and reopen the launcher after changes. Internal display defaults and validation remain in `psychopy_sync/config.py`.
 
-The twelve study articles are in `assets/articles/<article_id>.csv` (`A02`, `A03`, `A05`, `A08`, `A09`, `A12`, `A15`, `A19`, `A20`, `A28`, `A29`, `A30`). Each CSV has one column: the first cell is the title and each following cell is one body Screen from the pilot workbook, preserving its hard line breaks. A Screen can contain several sentences; the program does not split it further. The title is displayed on its own centered page; Space starts the pre-article baseline and then the body. It is excluded from word count, reading duration and TTS. Every body line is horizontally centered, with the text block vertically centered; word AOIs use those exact positions. `assets/stimulus_import.json` records source hashes, page-to-Screen mapping and word counts.
+The twelve study articles are in `assets/articles/<article_id>.csv` (`A02`, `A03`, `A05`, `A08`, `A09`, `A12`, `A15`, `A19`, `A20`, `A28`, `A29`, `A30`). Each CSV has one column: the first cell is the title and each following cell is one body Screen from the pilot workbook, preserving its hard line breaks. A Screen can contain several sentences; the program does not split it further. Each article starts with a 1500 ms fixation baseline, then its centered title page. Space on the title starts the body directly. The title is excluded from word count, reading duration and TTS. Every body line is horizontally centered, with the text block vertically centered; word AOIs use those exact positions. `assets/stimulus_import.json` records source hashes, page-to-Screen mapping and word counts.
 
-After each article in either condition, its questions appear one at a time with four clickable answer buttons. The article is hidden, and clicking one answer submits it and advances; correctness feedback is not displayed. Questions keep their CSV order and option order. `assets/questions/<article_id>.csv` stores one file per article, with columns `article_id, question_id, question_order, content, OptionA, OptionB, OptionC, OptionD, CorrectAnswer`. The supplied twelve files contain six questions each (72 total), extracted from the pilot workbook. Correct letters were matched to the official OneStopQA answer text after the workbook's option shuffling; source spelling differences and the A28/A29 source-order difference are documented in `assets/questions/import_manifest.json`. Pilot rating/feedback forms are not part of the experiment. See [question files and responses](docs/questions.md).
+After each article in either condition, its questions appear one at a time with four clickable answer buttons. The article is hidden, and clicking one answer submits it and advances; correctness feedback is not displayed. Questions keep their CSV order and option order. `assets/questions/<article_id>.csv` stores one file per article, with columns `article_id, question_id, question_order, content, OptionA, OptionB, OptionC, OptionD, CorrectAnswer`. The supplied twelve files contain six questions each (72 total), extracted from the pilot workbook. Correct letters were matched to the official OneStopQA answer text after the workbook's option shuffling; source spelling differences and the A28/A29 source-order difference are documented in `assets/questions/import_manifest.json`. Five fixed feedback questions follow the comprehension questions after every article in both conditions. The first two use continuous 1–4 sliders with four numbered ticks and labelled endpoints. The next two use No / Yes / Unsure buttons and typed notes (required for Yes); the last accepts optional typed concerns. Click Continue to submit each feedback answer. These fixed prompts are defined in code and need no article-specific CSV. See [question files and responses](docs/questions.md).
 
 `assets/user_assignments.csv` freezes the 200 assignments from planning document version 4.0 (seed 20261013). ID 1 uses R001, ID 2 uses R002, and so on. Each row contains SYNC/FLEX, its list ID, and four article IDs in order for each condition. No new draw is made at login. Reusing an ID preserves its assigned list; a changed schedule for an already registered ID raises an error. Group membership is saved for analysis; the full group-specific instruction wording is not supplied yet, so both groups currently use the existing common reading/listening prompt. Space starts each article. In Condition 1, Space advances a page and ends the last page. In Condition 2, each page plays its matching WAV and automatically advances when playback finishes. Escape stops the session.
 
-After Space starts an article, a central white `+` appears on the same black background for a target of **1500 ms**, then switches directly to the first sentence. This happens once per article in both conditions; sentences within an article advance directly. The cross has a separate AOI and Data Viewer baseline trial (`phase=baseline`, `sentence_index=0`), linked to the article ID. Sentence trials use `phase=reading`. Actual baseline start/end flips, duration and status are saved in the corresponding condition CSV. Baseline time is excluded from reading speed. Display timing is quantized to refresh cycles; use the recorded timestamps to check actual durations.
+Before each article title, a central white `+` appears on the same black background for a target of **1500 ms**, then switches directly to the title. Space starts the body from the title without another fixation. This happens once per article in both conditions; sentences within an article advance directly. The cross has a separate AOI and Data Viewer baseline trial (`phase=baseline`, `sentence_index=0`), linked to the article ID. Sentence trials use `phase=reading`. Actual baseline start/end flips, duration and status are saved in the corresponding condition CSV. Baseline time is excluded from reading speed. Display timing is quantized to refresh cycles; use the recorded timestamps to check actual durations.
 
 ## GPU server
 
@@ -63,7 +74,8 @@ The service loads the model and generates a short test WAV at startup. The login
 - `data/reading_speed.csv`: reading speed for each participant/session.
 - `data/<participant_id>/<session_id>/`: `condition1.csv`, `condition2.csv`, `user_logs.csv`, `sentence_pages.csv`, `word_aois.csv`, `session.json`, `stimuli/`, `screenshots/`, `interest_areas/`, `aoi_previews/` and `eyelink.edf`.
 - `data/<participant_id>/<session_id>/question_responses.csv`: question/option snapshots, selected answers, correctness, observed response times and assignment identity.
-- `data/<participant_id>/<session_id>/auxiliary_pages.csv`: title/question screenshots, AOIs, presentation status and paired flip events.
+- `data/<participant_id>/<session_id>/article_feedback.csv`: five feedback answers per article, continuous ratings, No/Yes/Unsure selections, typed notes, observed response times and assignment identity.
+- `data/<participant_id>/<session_id>/auxiliary_pages.csv`: title/question/feedback screenshots, AOIs, presentation status and paired flip events.
 - `assets/TTS/<participant_id>/<session_id>/`: `tts_index.csv`, requests, manifest and sentence WAVs inside article folders.
 - `data/launcher_logs/`: startup and experiment diagnostics.
 
@@ -71,11 +83,11 @@ Dummy sessions save their registry, reading-speed table and session directories 
 
 Reading speed is `60 × total words / sum of article reading seconds`. Each article's interval runs from the flip that displays its first page to the flip that removes its last page. Waiting between articles is excluded. In real mode, EyeLink recording remains continuous after calibration, including article waits, audio preparation and Condition 2 playback.
 
-Title pages, questions and baselines are excluded from reading speed. EyeLink recording remains continuous through all of them. Each title/question is a separate Data Viewer trial (`phase=title` or `phase=question`) with its actual screenshot and AOIs; answer buttons have AOI labels `option_A` through `option_D`.
+Title pages, comprehension questions, article feedback and baselines are excluded from reading speed and TTS. EyeLink recording remains continuous through all of them. Each title/question is a separate Data Viewer trial (`phase=title` or `phase=question`) with its actual screenshot and AOIs; answer buttons have AOI labels `option_A` through `option_D`.
 
-After all Condition 1 articles are completed, each Condition 2 sentence is submitted at the participant's measured WPM. Without a GPU URL, requests and the sentence index are saved as `not_configured`; no WAVs are generated.
+After all Condition 1 articles and feedback are completed, each Condition 2 body page is submitted at the participant's measured WPM, limited by `speed_cap`. Without a GPU URL, requests and the sentence index are saved as `not_configured`; no WAVs are generated.
 
-With a GPU URL, the first Condition 2 article is released as soon as all its sentence WAVs are downloaded, verified and preloaded. Later articles continue generating/downloading in the background. Each article starts with Space; sentences then display and play in CSV order without additional key presses. If the next article is not ready, a wait screen appears. Condition 2 timing and playback events are saved alongside Condition 1 data.
+With a GPU URL, the first Condition 2 article is released as soon as all its sentence WAVs are downloaded, verified and preloaded. Later articles continue generating/downloading in the background. Each article shows fixation then its title; Space starts the body, and pages display and play in CSV order without additional key presses. If the next article is not ready, a wait screen appears. Condition 2 timing and playback events are saved alongside Condition 1 data.
 
 Hardware recording, EDF transfer, speaker output and real F5-TTS still require verification on the experiment setup.
 

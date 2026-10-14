@@ -4,6 +4,7 @@ from .condition1 import ExperimentAborted
 from .data_viewer import DataViewerExport
 from .word_layout import WordPage
 from .question_display import QuestionPage
+from .feedback import FEEDBACK_ITEMS, FeedbackPage, ask_feedback
 
 
 class ReadingDisplay:
@@ -18,6 +19,7 @@ class ReadingDisplay:
         self.title_pages = {}
         self.question_pages = {}
         self.question_mouse = None
+        self.feedback_pages = {}
         self.text_width = int(win.size[0] * config.text_width_fraction)
         self.text_height = int(win.size[1] * config.text_height_fraction)
         scale = self.text_scale
@@ -61,14 +63,16 @@ class ReadingDisplay:
         for article_id, questions in question_sets.items():
             for question in questions:
                 self.question_pages[article_id, question.question_order] = QuestionPage(self, question, len(questions))
-        if self.question_pages:
-            from psychopy import event
-            self.question_mouse = event.Mouse(win=self.win, visible=False)
+        from psychopy import event
+        self.question_mouse = event.Mouse(win=self.win, visible=False)
+        self.feedback_pages = {item.order: FeedbackPage(self, item) for item in FEEDBACK_ITEMS}
 
     def draw_auxiliary(self, row):
         if row["phase"] == "title":
             self.title_pages[row["article_id"]].draw()
             self.title_footer.draw()
+        elif row["phase"] == "feedback":
+            self.feedback_pages[row["question_order"]].draw()
         else:
             self.question_pages[row["article_id"], row["question_order"]].draw()
 
@@ -89,7 +93,7 @@ class ReadingDisplay:
         try:
             self._wait(lambda: self.draw_auxiliary(row),
                        lambda: self._auxiliary_on_flip(log, condition, article.article_id, "title"))
-            # It remains visible until the baseline's first flip.
+            # It remains visible until the first body's flip.
             log.flush()
         except BaseException as exc:
             try:
@@ -160,6 +164,9 @@ class ReadingDisplay:
         finally:
             mouse.setVisible(False)
             store.save()
+
+    def ask_feedback(self, article, log, store, condition):
+        return ask_feedback(self, article, log, store, condition)
 
     def export_pages(self, store, articles, prepared):
         self.prompt.text = "Preparing sentence images and word interest areas. Please wait."
@@ -232,10 +239,10 @@ class ReadingDisplay:
         self._wait(draw, lambda: self._page_on_flip(log, onset, "condition1", article_id, page_index))
 
     def show_baseline(self, log, condition, article_id):
-        """Keep '+' visible until the first sentence's flip can reach 1500 ms.
+        """Keep '+' visible until the title's flip can reach 1500 ms.
 
         Return with the cross still on the front buffer; the caller replaces
-        it directly with the sentence. Both ends are recorded on real flips.
+        it directly with the title. Both ends are recorded on real flips.
         getFutureFlipTime(None) and timeOnFlip share PsychoPy's default clock.
         """
         self.keyboard.clearEvents()

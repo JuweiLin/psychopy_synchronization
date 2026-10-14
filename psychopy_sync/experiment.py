@@ -79,6 +79,8 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
         store.metadata["status"] = "condition1_completed"
         log.emit("READING_SPEED", detail=f"{summary['speed_per_minute']:.6f} {summary['speed_unit']}")
         audio = SessionAudio(config, store, articles["condition2"], summary)
+        log.emit("TTS_SPEED_POLICY", "condition2", detail=json.dumps({name: store.metadata["reading_speed"][name]
+                 for name in ("speed_per_minute", "tts_speed_cap_wpm", "tts_target_wpm", "tts_speed_capped")}))
         audio.start()
         log.emit("TTS_START" if audio.worker is not None else "TTS_SKIPPED", "condition2",
                  detail=audio.manifest["status"])
