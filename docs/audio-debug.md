@@ -8,6 +8,8 @@ Condition 2 articles.
 
 1. Select an article and body page, then click **Load page**. The text can also be
    edited, for example to isolate a sentence whose first words are being lost.
+   The editor scrolls vertically for long pasted text. The settings area also
+   scrolls when the window is small; Cancel and Generate remain at the bottom.
 2. Enter positive WPM values separated by commas or spaces. They are tested in
    the entered order. The default is `100, 150, 200, 250, 300, 400`.
 3. Set **Plays per speed** (default 2), then click **Generate and listen**. A real
@@ -16,6 +18,14 @@ Condition 2 articles.
 4. Press Space to play. After playback, press **C** if the first words are
    complete, **M** if the beginning is missing, **U** if unsure, or **R** to replay
    the same file before moving on. Escape stops and saves the available results.
+
+The diagnostic plays in a window with a scrollable text preview. During playback,
+use the mouse wheel, drag the right-hand scrollbar, or press Up/Down,
+Page Up/Page Down, Home or End to navigate. Each play starts at the beginning of
+the text. Long input is no longer passed through the formal experiment's
+single-page height validation; the entire original input is still sent to TTS
+and saved in the manifest. The preview wraps text for display only. Formal
+experiment pages keep their existing size checks and layout.
 
 Each speed requests one WAV of the same text using the normal target-duration
 calculation. Repetitions and R replays reuse that exact WAV rather than generating

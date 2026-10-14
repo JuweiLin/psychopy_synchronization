@@ -6,9 +6,10 @@ Call these functions on the PsychoPy main thread.
 from .config import DisplayConfig
 
 
-def create_window(config: DisplayConfig):
+def create_window(config: DisplayConfig, *, allow_gui=None):
     from psychopy import visual
 
+    options = {} if allow_gui is None else {"allowGUI": allow_gui}
     win = visual.Window(
         size=(config.width, config.height),
         screen=config.screen_index,
@@ -16,6 +17,7 @@ def create_window(config: DisplayConfig):
         units="pix",
         color="black",
         waitBlanking=True,
+        **options,
     )
     if config.assumed_refresh_rate_hz is not None:
         rate = config.assumed_refresh_rate_hz

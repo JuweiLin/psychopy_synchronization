@@ -23,22 +23,28 @@ def show_audio_debug_dialog(parent, config):
         raise ValueError("No article pages are available for audio debug.")
     dialog = wx.Dialog(parent, title="Audio Onset Debug — Dummy Mode", size=(680, 650),
                        style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+    dialog.SetMinSize((560, 420))
+    body = wx.ScrolledWindow(dialog, style=wx.VSCROLL)
+    body.SetScrollRate(0, 16)
     layout = wx.BoxSizer(wx.VERTICAL)
-    layout.Add(wx.StaticText(dialog, label="Test the same text at several generated speaking speeds."), 0, wx.ALL, 16)
+    outer = wx.BoxSizer(wx.VERTICAL)
+    outer.Add(body, 1, wx.EXPAND)
+    layout.Add(wx.StaticText(body, label="Test the same text at several generated speaking speeds."), 0, wx.ALL, 16)
     source_row = wx.BoxSizer(wx.HORIZONTAL)
-    source_row.Add(wx.StaticText(dialog, label="Article"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
-    article = wx.Choice(dialog, choices=list(articles))
+    source_row.Add(wx.StaticText(body, label="Article"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+    article = wx.Choice(body, choices=list(articles))
     article.SetSelection(0)
     source_row.Add(article, 1, wx.RIGHT, 12)
-    source_row.Add(wx.StaticText(dialog, label="Body page"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
-    page = wx.SpinCtrl(dialog, min=1, max=len(articles[article.GetStringSelection()]), initial=1, size=(80, -1))
+    source_row.Add(wx.StaticText(body, label="Body page"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 8)
+    page = wx.SpinCtrl(body, min=1, max=len(articles[article.GetStringSelection()]), initial=1, size=(80, -1))
     source_row.Add(page, 0, wx.RIGHT, 12)
-    load = wx.Button(dialog, label="Load page")
+    load = wx.Button(body, label="Load page")
     source_row.Add(load, 0)
     layout.Add(source_row, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 16)
-    layout.Add(wx.StaticText(dialog, label="Text (editable)"), 0, wx.LEFT | wx.TOP, 16)
-    text = wx.TextCtrl(dialog, style=wx.TE_MULTILINE)
-    layout.Add(text, 1, wx.EXPAND | wx.ALL, 16)
+    layout.Add(wx.StaticText(body, label="Text (editable; scroll to read long text)"), 0, wx.LEFT | wx.TOP, 16)
+    text = wx.TextCtrl(body, style=wx.TE_MULTILINE | wx.VSCROLL, size=(-1, 260))
+    text.SetMinSize((-1, 260))
+    layout.Add(text, 0, wx.EXPAND | wx.ALL, 16)
     source = {}
 
     def load_page(event=None):
@@ -55,22 +61,23 @@ def show_audio_debug_dialog(parent, config):
     article.Bind(wx.EVT_CHOICE, article_changed)
     load.Bind(wx.EVT_BUTTON, load_page)
     load_page()
-    layout.Add(wx.StaticText(dialog, label="WPM values (commas or spaces; tested in this order)"), 0, wx.LEFT | wx.RIGHT, 16)
-    wpms = wx.TextCtrl(dialog, value="100, 150, 200, 250, 300, 400")
+    layout.Add(wx.StaticText(body, label="WPM values (commas or spaces; tested in this order)"), 0, wx.LEFT | wx.RIGHT, 16)
+    wpms = wx.TextCtrl(body, value="100, 150, 200, 250, 300, 400")
     layout.Add(wpms, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.TOP, 16)
     repeat_row = wx.BoxSizer(wx.HORIZONTAL)
-    repeat_row.Add(wx.StaticText(dialog, label="Plays per speed"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 12)
-    repeats = wx.SpinCtrl(dialog, min=1, max=10, initial=2, size=(80, -1))
+    repeat_row.Add(wx.StaticText(body, label="Plays per speed"), 0, wx.ALIGN_CENTER_VERTICAL | wx.RIGHT, 12)
+    repeats = wx.SpinCtrl(body, min=1, max=10, initial=2, size=(80, -1))
     repeat_row.Add(repeats, 0)
     layout.Add(repeat_row, 0, wx.ALL, 16)
-    explanation = wx.StaticText(dialog, label="Each speed generates one WAV. Replays use that exact file.\n"
+    explanation_text = ("Each speed generates one WAV. Replays use that exact file.\n"
         "After playback: C = complete, M = missing beginning, U = unsure, R = replay.\n"
         "Uses Condition 2 playback. No Condition 1 reading or EyeLink is needed.")
+    explanation = wx.StaticText(body, label=explanation_text)
     explanation.Wrap(630)
     layout.Add(explanation, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 16)
     error = wx.StaticText(dialog, label="")
     error.SetForegroundColour("#B42318")
-    layout.Add(error, 0, wx.EXPAND | wx.ALL, 16)
+    outer.Add(error, 0, wx.EXPAND | wx.ALL, 16)
     buttons = wx.BoxSizer(wx.HORIZONTAL)
     cancel = wx.Button(dialog, id=wx.ID_CANCEL, label="Cancel")
     begin = wx.Button(dialog, label="Generate and listen")
@@ -78,7 +85,7 @@ def show_audio_debug_dialog(parent, config):
     buttons.AddStretchSpacer()
     buttons.Add(cancel, 0, wx.RIGHT, 8)
     buttons.Add(begin, 0)
-    layout.Add(buttons, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
+    outer.Add(buttons, 0, wx.EXPAND | wx.LEFT | wx.RIGHT | wx.BOTTOM, 16)
     selected = {}
 
     def start(event):
@@ -89,14 +96,27 @@ def show_audio_debug_dialog(parent, config):
                                                  repeats=repeats.GetValue(), **source))
         except ValueError as exc:
             error.SetLabel(str(exc))
-            error.Wrap(630)
+            error.Wrap(max(200, dialog.GetClientSize().width - 32))
             dialog.Layout()
+            body.FitInside()
             return
         selected.update(asdict(options))
         dialog.EndModal(wx.ID_OK)
 
     begin.Bind(wx.EVT_BUTTON, start)
-    dialog.SetSizer(layout)
+
+    def resize_body(event):
+        explanation.SetLabel(explanation_text)
+        explanation.Wrap(max(200, body.GetClientSize().width - 32))
+        layout.Layout()
+        body.FitInside()
+        event.Skip()
+
+    body.Bind(wx.EVT_SIZE, resize_body)
+    body.SetSizer(layout)
+    dialog.SetSizer(outer)
+    dialog.Layout()
+    body.FitInside()
     dialog.CentreOnParent()
     try:
         return selected if dialog.ShowModal() == wx.ID_OK else None

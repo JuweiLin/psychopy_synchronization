@@ -14,6 +14,7 @@ import uuid
 
 from shared.contracts import GenerationRequest
 from .audio_client import AudioClient, AudioFailure, BackgroundAudioClient
+from .audio_debug_text import ScrollableDebugText
 from .condition1 import ExperimentAborted
 from .config import DisplayConfig, ExperimentConfig
 from .display import create_window, preload_article_audio
@@ -147,12 +148,14 @@ def run_debug(options, config=None):
             raise ValueError("Set tts_server_url in config.py before using audio debug.")
         from psychopy import logging
 
-        win = create_window(DisplayConfig(assumed_refresh_rate_hz=None))
+        win = create_window(DisplayConfig(width=1000, height=700, fullscreen=False, assumed_refresh_rate_hz=None),
+                            allow_gui=True)
         view = DebugDisplay(win, config, DummyEyeLinkController())
         store = SimpleNamespace(directory=directory, participant_id="0", session_id=session_id, metadata=manifest)
         log = DebugEventLog(store, view.controller, logging.defaultClock.getTime)
         log.emit("AUDIO_DEBUG_START")
-        page = view.prepare([SimpleNamespace(article_id="debug", title="Audio debug", pages=(options.text,))])["debug"][0]
+        page = ScrollableDebugText(view, options.text)
+        manifest["text_display"] = "windowed_scrollable_preview; full original text sent to TTS"
         readiness = queue.Queue()
         threading.Thread(target=lambda: readiness.put(check_gpu_server(config.tts_server_url, allow_demo=False)),
                          name="audio-debug-readiness", daemon=True).start()
@@ -213,6 +216,7 @@ def run_debug(options, config=None):
                                    ("duration_s", "actual_wpm", "job_id", "audio_path", "audio_sha256")})
                     results.append(row)
                     try:
+                        page.reset_scroll()
                         view.play_page(page, playback, audio, log, onset, request.article_id, 1)
                         row["playback_status"] = "completed"
                         row["rating"] = view.rate_onset(request.target_wpm)
