@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from shared.contracts import GenerationRequest
+from shared.file_io import replace_with_retry
 from .audio_client import AudioClient, AudioFailure, BackgroundAudioClient, CachedAudio
 from .event_log import write_csv
 
@@ -66,7 +67,7 @@ class SessionAudio:
     def _write_json(path, data):
         temporary = path.with_suffix(".json.tmp")
         temporary.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        temporary.replace(path)
+        replace_with_retry(temporary, path)
 
     def _save(self):
         self._write_json(self.directory / "manifest.json", self.manifest)

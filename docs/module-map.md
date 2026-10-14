@@ -35,6 +35,7 @@ The experiment measures Condition 1 reading speed, then presents Condition 2 sen
 | `psychopy_sync/session_audio.py` | Prepares per-sentence requests, WAV paths, metadata, manifest and `tts_index.csv` |
 | `psychopy_sync/audio_client.py` | Background submission, polling, download and local WAV verification |
 | `shared/contracts.py` | Audio request identity, target duration, checksums and PCM WAV inspection |
+| `shared/file_io.py` | Bounded retries for Windows access/sharing errors when publishing session CSV/JSON, TTS JSON and desktop results |
 | `gpu_service/tts_server.py` | HTTP audio service |
 | `gpu_config.py` | GPU host/port, reference files, device and demo switch |
 | `start_gpu_server.sh` | Linux automatic uv/Python bootstrap; starts the managed GPU environment |

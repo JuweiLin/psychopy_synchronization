@@ -13,6 +13,7 @@ import re
 import uuid
 
 from .feedback import FEEDBACK_ITEMS
+from shared.file_io import replace_with_retry
 
 ARTICLE_FIELDS = ["participant_id", "session_id", "condition", "order", "article_id", "title", "path",
                   "source_rows", "source_sha256", "text_sha256", "pages_sha256",
@@ -64,7 +65,7 @@ def write_csv(path, fields, rows):
         writer = csv.DictWriter(stream, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
-    temporary.replace(path)
+    replace_with_retry(temporary, path)
 
 
 def append_csv(path, fields, row):
@@ -294,7 +295,7 @@ class SessionStore:
         write_csv(self.directory / "article_feedback.csv", FEEDBACK_RESPONSE_FIELDS, self.feedback_rows)
         temporary = self.directory / "session.json.tmp"
         temporary.write_text(json.dumps(self.metadata, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-        temporary.replace(self.directory / "session.json")
+        replace_with_retry(temporary, self.directory / "session.json")
 
     def article_durations(self, condition, article_id):
         pages = [row for row in self.sentences if row["condition"] == condition and row["article_id"] == article_id]

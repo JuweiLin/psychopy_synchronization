@@ -9,6 +9,7 @@ import traceback
 from .condition1 import ExperimentAborted
 from .config import ExperimentConfig
 from .event_log import validate_login_participant_id
+from shared.file_io import replace_with_retry
 
 
 def session_details(metadata, directory=None):
@@ -46,7 +47,7 @@ def execute(participant_id, result_path, runner=None):
     path = Path(result_path)
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(path)
+    replace_with_retry(temporary, path)
     return code
 
 

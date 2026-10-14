@@ -153,7 +153,12 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
             store.metadata["cleanup_errors"] = cleanup_errors
             if primary_error is None:
                 store.metadata["status"] = "failed"
-        store.save()
+        try:
+            store.save()
+        except Exception as exc:
+            cleanup_errors.append(f"Final data save failed: {exc}")
+            store.metadata["cleanup_errors"] = cleanup_errors
+            store.metadata["status"] = "failed"
         for error in cleanup_errors:
             logging.error(error)
     if primary_error is not None:

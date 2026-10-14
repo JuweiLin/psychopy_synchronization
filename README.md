@@ -93,6 +93,14 @@ Hardware recording, EDF transfer, speaker output and real F5-TTS still require v
 
 For real recording, the result window shows the downloaded EDF path and byte count. EDF transfer is attempted on normal completion and Escape, retries up to three times, and publishes the file only when the received byte count matches the local file size. A failure shows the Host EDF filename for recovery. Dummy mode never produces an EDF.
 
+On Windows, JSON/CSV publication retries access/sharing errors for up to 3.55
+seconds before reporting failure. Persistent errors retain the temporary file
+and existing destination; the diagnostic log identifies the paths. Close programs
+using the files and check their read-only attributes and folder permissions.
+Keep the entire session folder, including any `.tmp` files, when investigating
+an interrupted save. A saved EDF does not imply the whole experiment completed
+or that the final `session.json` update succeeded.
+
 Every selected sentence is captured as a full-screen PNG before calibration/recording, using the actual PsychoPy page layout (including the Condition 1 footer). Words are measured and positioned individually; those same positions generate word AOI files under `interest_areas/`. `word_aois.csv` records each word and its screen rectangle; `aoi_previews/` contains screenshot copies with red AOI outlines for inspection. `sentence_pages.csv` maps each sentence to its image/IAS files and visible interval; unshown pages stay `not_presented`. Each displayed sentence is one Data Viewer trial with image and `!V IAREA FILE` messages. Copy the complete session folder and import `eyelink.edf` to load the prepared word AOIs. Inspect their alignment; Data Viewer image auto-segmentation is not needed. The new word layout can change line wrapping/spacing compared with earlier sessions and does not retrofit old EDFs. See [Data Viewer output](docs/data-viewer.md).
 
 ## Details
