@@ -102,6 +102,10 @@ class SessionStore:
                 # Remove legacy name columns while retaining IDs and registration dates.
                 users = [{field: row.get(field, "") for field in USER_FIELDS} for row in reader]
         existing = next((row for row in users if row["participant_id"] == participant_id), None)
+        if existing is not None and config.dummy_mode and participant_id == "0":
+            if any(existing[name] for name in ASSIGNMENT_FIELDS):
+                existing.update(assignment_fields)
+                migrate_users = True
         if existing is not None and assignment is not None:
             for name, value in assignment_fields.items():
                 if existing[name] and existing[name] != value:
@@ -142,8 +146,8 @@ class SessionStore:
                              host_edf_name="" if config.dummy_mode else uuid.uuid4().hex[:8].upper() + ".EDF",
                              edf_status="disabled_dummy" if config.dummy_mode else "not_opened")
         self.metadata["assignment"] = assignment.metadata() if assignment is not None else None
-        self.metadata["selection_method"] = ("dummy_schedule_preview" if assignment.preview_of else "frozen_schedule") \
-            if assignment is not None else "random_pool"
+        self.metadata["selection_method"] = "frozen_schedule" if assignment is not None else (
+            "dummy_random_pool" if config.dummy_mode else "random_pool")
         self.metadata.update(edf_path="", edf_bytes=0,
                              edf_expected_path=str((self.directory / "eyelink.edf").resolve()),
                              dataviewer_trial_unit="article_baseline_and_sentence", screenshots_status="pending",

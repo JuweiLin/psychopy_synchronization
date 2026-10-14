@@ -7,8 +7,9 @@ order: four visual-only pagesets followed by four TTS pagesets. SYNC/FLEX is a
 participant-level instruction group. Full group-specific instruction wording
 has not yet been supplied; the experiment currently retains its common prompt.
 
-ID 0 is a dummy preview of R001's article list, with no formal allocation slot.
-Its results stay under `data/dummy/`. The frozen table records assignments;
+ID 0 randomly draws one Condition 1 article and two Condition 2 articles for
+each dummy session, without overlap or a formal allocation slot. Its results
+stay under `data/dummy/`. The frozen table records assignments;
 completed readings are recorded separately in each session's condition tables.
 
 `articles/` contains one UTF-8 CSV per study article. The first cell is the title

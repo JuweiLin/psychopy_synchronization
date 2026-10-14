@@ -25,7 +25,23 @@ def experiment_command(participant_id, result_path):
     return command
 
 
+def audio_debug_command(options_path, result_path):
+    return [sys.executable, "-m", "psychopy_sync.audio_debug", "--participant-id", "0",
+            "--options-file", str(options_path), "--result-file", str(result_path)]
+
+
 def result_message(result):
+    if result.get("audio_debug"):
+        title = {"completed": "Audio debug complete", "aborted": "Audio debug stopped"}.get(
+            result.get("status"), "Audio debug failed")
+        text = f"Generated WAVs: {result.get('generated', 0)}\nRated plays: {result.get('rated', 0)}"
+        if result.get("generation_failures"):
+            text += f"\nFailed speeds: {result['generation_failures']} (see audio_index.csv)"
+        if result.get("error"):
+            text += "\n" + result["error"]
+        if result.get("directory"):
+            text += f"\nSaved WAVs, onset_results.csv and logs:\n{result['directory']}"
+        return title, text
     details = ""
     if result.get("edf_status") == "downloaded":
         details += f"\nEDF saved: {result['edf_path']} ({result.get('edf_bytes', 0):,} bytes)"
@@ -111,6 +127,10 @@ def main():
             self.participant.Bind(wx.EVT_TEXT, self.participant_changed)
             layout.AddSpacer(12)
             layout.Add(self.start_button, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 32)
+            self.debug_button = wx.Button(panel, label="Audio Onset Debug...", size=(-1, 34))
+            self.debug_button.Bind(wx.EVT_BUTTON, self.open_audio_debug)
+            self.debug_button.Hide()
+            layout.Add(self.debug_button, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 32)
             layout.AddSpacer(16)
             gpu_row = wx.BoxSizer(wx.HORIZONTAL)
             self.gpu_status = label("Checking GPU server...", 11, "#63708A")
@@ -146,9 +166,17 @@ def main():
                 dummy_mode = False
             if self.config.dummy_mode == dummy_mode:
                 return
-            self.config = replace(self.config, dummy_mode=dummy_mode)
+            base_config = ExperimentConfig()
+            self.config = replace(base_config, dummy_mode=dummy_mode,
+                                  condition1_count=1 if dummy_mode else base_config.condition1_count,
+                                  condition2_count=2 if dummy_mode else base_config.condition2_count)
+            self.debug_button.Show(dummy_mode)
+            self.SetClientSize((540, 660 if dummy_mode else 600))
+            self.panel.Layout()
+            self.Layout()
             self.status_title.SetLabel("Dummy mode — no eye tracking" if self.config.dummy_mode else "EyeLink recording mode")
-            self.status.SetValue("EyeLink calibration and recording will be skipped." if self.config.dummy_mode else
+            self.status.SetValue("Dummy: 1 random Condition 1 article and 2 random Condition 2 articles.\n"
+                                 "Use Audio Onset Debug to test manual WPM values directly." if self.config.dummy_mode else
                                  "EyeLink calibration and continuous recording are enabled.")
             self.start_button.SetLabel("Start Dummy Session" if self.config.dummy_mode else "Start Experiment")
             # Invalidate a pending launch/check from the previous mode. A demo
@@ -185,7 +213,7 @@ def main():
             threading.Thread(target=worker, name="gpu-readiness-check", daemon=True).start()
 
         def server_checked(self, result, generation):
-            if self.closing or generation != self.server_check_generation:
+            if self.closing or self.process is not None or generation != self.server_check_generation:
                 return
             self.server_check_in_progress = False
             self.server_result = result
@@ -235,18 +263,45 @@ def main():
             # Recheck before each session, even if the initial launch check passed.
             self.check_server(participant_id)
 
-        def launch_session(self, participant_id):
+        def open_audio_debug(self, event):
+            if self.process is not None or not self.config.dummy_mode:
+                return
+            try:
+                if validate_login_participant_id(self.participant.GetValue().strip()) != "0":
+                    return
+                add_psychopy_packages()
+                missing = [name for name in required_modules(self.config) if importlib.util.find_spec(name) is None]
+                if missing:
+                    raise ValueError("Missing components: " + ", ".join(missing))
+                from .audio_debug_ui import show_audio_debug_dialog
+                options = show_audio_debug_dialog(self, self.config)
+                if options is not None:
+                    self.pending_participant = None
+                    self.launch_session("0", debug_options=options)
+            except Exception as exc:
+                self.error.SetLabel(str(exc))
+                self.error.Wrap(476)
+                self.Layout()
+
+        def launch_session(self, participant_id, debug_options=None):
             try:
                 if validate_login_participant_id(self.participant.GetValue().strip()) != participant_id:
                     return
+                if debug_options is not None and participant_id != "0":
+                    raise ValueError("Audio debug is available only for participant ID 0.")
                 self.temporary = tempfile.TemporaryDirectory(prefix="reading-experiment-")
                 self.result_path = Path(self.temporary.name) / "result.json"
+                command = experiment_command(participant_id, self.result_path)
+                if debug_options is not None:
+                    options_path = Path(self.temporary.name) / "audio_debug.json"
+                    options_path.write_text(json.dumps(debug_options), encoding="utf-8")
+                    command = audio_debug_command(options_path, self.result_path)
                 logs = self.config.output_dir / "launcher_logs"
                 logs.mkdir(parents=True, exist_ok=True)
                 stamp = datetime.now().strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]
                 self.log_path = logs / f"{stamp}.log"
                 self.log_stream = self.log_path.open("w", encoding="utf-8")
-                self.process = subprocess.Popen(experiment_command(participant_id, self.result_path),
+                self.process = subprocess.Popen(command,
                                                 cwd=PROJECT_ROOT, stdin=subprocess.DEVNULL,
                                                 stdout=self.log_stream, stderr=subprocess.STDOUT)
             except Exception as exc:
@@ -255,11 +310,18 @@ def main():
                 self.error.Wrap(476)
                 self.Layout()
                 return
+            self.server_check_generation += 1
+            self.server_check_in_progress = False
+            self.pending_participant = None
+            if self.retry_call is not None:
+                self.retry_call.Stop()
+                self.retry_call = None
             self.participant.SetValue(participant_id)
             self.start_button.Disable()
+            self.debug_button.Disable()
             self.participant.Disable()
             self.gpu_check_button.Disable()
-            self.status_title.SetLabel("Session in progress")
+            self.status_title.SetLabel("Audio debug in progress" if debug_options is not None else "Session in progress")
             self.status.SetValue("Continue in the experiment window. Press Escape to stop.")
             self.timer.Start(250)
             self.Hide()
@@ -276,7 +338,7 @@ def main():
                 title, message = result_message(result)
             except (OSError, ValueError, KeyError, TypeError):
                 title, message = "Session failed", "The experiment process exited unexpectedly."
-            if title == "Session failed":
+            if title in ("Session failed", "Audio debug failed"):
                 message += f"\nDiagnostic log: {self.log_path}"
             self.release()
             self.status_title.SetLabel(title)
@@ -286,11 +348,13 @@ def main():
             self.start_button.Enable(self.server_result is not None and self.server_result.can_start)
             self.gpu_check_button.Enable()
             self.participant.Enable()
-            self.SetClientSize((540, 600))
+            self.debug_button.Enable()
+            self.SetClientSize((540, 660 if self.config.dummy_mode else 600))
             self.Layout()
             self.Show()
             self.Raise()
             self.participant.SetFocus()
+            wx.CallAfter(self.check_server)
 
         def release(self):
             self.process = None

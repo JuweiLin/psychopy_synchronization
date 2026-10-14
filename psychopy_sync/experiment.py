@@ -20,6 +20,9 @@ from .session_audio import SessionAudio
 def run_experiment(participant_id, config=None, display_config=None, eyelink_config=None):
     config = config or ExperimentConfig()
     display_config = display_config or DisplayConfig(assumed_refresh_rate_hz=None)
+    if participant_id in ("0", "00", "000"):
+        participant_id = "0"
+        config = replace(config, dummy_mode=True, condition1_count=1, condition2_count=2, random_seed=None)
     assignment = load_assignment(config, participant_id)
     if assignment is not None:
         participant_id = assignment.participant_id

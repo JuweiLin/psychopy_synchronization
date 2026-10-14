@@ -1,7 +1,7 @@
 """Frozen participant assignments exported from the study planning document."""
 
 import csv
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass
 import hashlib
 import io
 from pathlib import Path
@@ -20,7 +20,6 @@ class ParticipantAssignment:
     condition1_articles: tuple
     condition2_articles: tuple
     source_sha256: str
-    preview_of: str = ""
 
     def metadata(self):
         return asdict(self)
@@ -28,6 +27,8 @@ class ParticipantAssignment:
 
 def load_assignment(config, participant_id):
     participant_id = validate_login_participant_id(participant_id)
+    if participant_id == "0":
+        return None  # Dummy sessions draw a fresh, smaller random selection.
     path = Path(config.assets_dir) / "user_assignments.csv"
     raw = path.read_bytes()
     reader = csv.DictReader(io.StringIO(raw.decode("utf-8-sig"), newline=""))
@@ -56,7 +57,4 @@ def load_assignment(config, participant_id):
         raise ValueError("The frozen assignment table must contain all participant IDs from 1 to 200")
     if (config.condition1_count, config.condition2_count) != (4, 4):
         raise ValueError("The frozen study schedule requires condition1_count = 4 and condition2_count = 4")
-    if participant_id == "0":
-        # Preview the first list without claiming a formal allocation slot.
-        return replace(rows["1"], participant_id="0", allocation_slot="", preview_of=rows["1"].allocation_slot)
     return rows[participant_id]

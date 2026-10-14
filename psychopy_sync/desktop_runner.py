@@ -28,6 +28,8 @@ def execute(participant_id, result_path, runner=None):
             from .experiment import run_experiment
             runner = run_experiment
         config = replace(ExperimentConfig(), dummy_mode=participant_id == "0")
+        if config.dummy_mode:
+            config = replace(config, condition1_count=1, condition2_count=2, random_seed=None)
         summary, directory = runner(participant_id, config=config)
         metadata = json.loads((Path(directory) / "session.json").read_text(encoding="utf-8"))
         result = dict(status="completed", summary=summary, **session_details(metadata, directory))

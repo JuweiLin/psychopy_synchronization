@@ -15,7 +15,8 @@ The experiment measures Condition 1 reading speed, then presents Condition 2 sen
 | `config.py` | Four editable settings: condition counts, tracker IP and GPU URL |
 | `psychopy_sync/config.py` | Loads root settings; keeps internal defaults and validation |
 | `psychopy_sync/experiment.py` | Calibration → continuous recording → Condition 1 → speed → background TTS → Condition 2 playback → cleanup |
-| `psychopy_sync/assignments.py`, `assets/user_assignments.csv` | Frozen mapping from IDs 1–200 to SYNC/FLEX and ordered article lists; ID 0 previews R001 |
+| `psychopy_sync/assignments.py`, `assets/user_assignments.csv` | Frozen mapping from IDs 1–200 to SYNC/FLEX and ordered article lists; ID 0 bypasses the table for a 1+2 random draw |
+| `psychopy_sync/audio_debug.py`, `psychopy_sync/audio_debug_ui.py` | Dummy-only manual WPM sweeps; shared TTS transport and Condition 2 PTB playback; raw WAVs, ratings and logs |
 | `psychopy_sync/articles.py` | Loads article CSVs, preserves pages, counts words and follows the frozen article order |
 | `scripts/import_study_materials.py`, `assets/stimulus_import.json` | Imports body Screens and the frozen schedule from XLSX/DOCX, recording provenance and excluding questions |
 | `psychopy_sync/reading_display.py` | Prepares pages, shows one 1500 ms cross per article, handles keys, binds events to flips and schedules PTB sentence playback |
