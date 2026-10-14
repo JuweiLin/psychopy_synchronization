@@ -37,6 +37,14 @@ SENTENCE_FIELDS = ["participant_id", "session_id", "condition", "article_id", "s
 WORD_AOI_FIELDS = ["participant_id", "session_id", "condition", "article_id", "sentence_index",
                    "trial_id", "screenshot_path", "ias_path", "word_index", "line_index", "word",
                    "ia_label", "char_start", "char_end", "left", "top", "right", "bottom"]
+AUXILIARY_FIELDS = ["participant_id", "session_id", "condition", "article_id", "phase", "item_id", "question_id",
+    "question_order", "text", "trial_id", "screenshot_path", "ias_path", "aoi_preview_path", "screenshot_status",
+    "screenshot_sha256", "ias_status", "ias_sha256", "width_px", "height_px", "status", "start_event_id",
+    "end_event_id", "start_timestamp_s", "end_timestamp_s", "duration_s"]
+QUESTION_RESPONSE_FIELDS = ["participant_id", "session_id", "condition", "article_id", "question_id", "question_order",
+    "content", "OptionA", "OptionB", "OptionC", "OptionD", "CorrectAnswer", "source_path", "source_sha256",
+    "status", "selected_answer", "selected_text", "is_correct", "start_event_id", "end_event_id",
+    "start_timestamp_s", "end_timestamp_s", "response_event_id", "response_timestamp_s", "response_time_s"] + ASSIGNMENT_FIELDS
 
 
 def utc_now():
@@ -76,7 +84,7 @@ def validate_login_participant_id(participant_id):
 
 
 class SessionStore:
-    def __init__(self, config, participant_id, articles, session_id=None, assignment=None):
+    def __init__(self, config, participant_id, articles, session_id=None, assignment=None, questions=None):
         validate_participant_id(participant_id)
         self.participant_id = participant_id
         assignment_fields = {name: "" for name in ASSIGNMENT_FIELDS}
@@ -150,11 +158,11 @@ class SessionStore:
             "dummy_random_pool" if config.dummy_mode else "random_pool")
         self.metadata.update(edf_path="", edf_bytes=0,
                              edf_expected_path=str((self.directory / "eyelink.edf").resolve()),
-                             dataviewer_trial_unit="article_baseline_and_sentence", screenshots_status="pending",
+                             dataviewer_trial_unit="title_baseline_reading_question", screenshots_status="pending",
                              screenshots_directory=str((self.directory / "screenshots").resolve()),
                              sentence_index_path=str((self.directory / "sentence_pages.csv").resolve()),
                              word_aoi_status="pending", word_aoi_unit="whitespace_token",
-                             word_aoi_layout="positioned_word_textstim_v1",
+                             word_aoi_layout="centered_word_textstim_v2",
                              word_aoi_coordinates="framebuffer_pixels_top_left_origin_inclusive",
                              word_aoi_index_path=str((self.directory / "word_aois.csv").resolve()),
                              word_aoi_directory=str((self.directory / "interest_areas").resolve()))
@@ -167,8 +175,36 @@ class SessionStore:
                              reading_duration_method="sum_of_visible_sentence_intervals")
         self.sentences = []
         self.words = []
+        self.auxiliary = []
+        self.question_rows = []
+        self.metadata.update(title_handling="first CSV cell displayed before baseline; excluded from TTS and WPM",
+            page_alignment="each line horizontally centered; text block vertically centered",
+            question_timing="after each article; excluded from WPM; no correctness feedback",
+            questions_status="not_presented" if questions else "not_configured")
         for condition, selected in articles.items():
             for article in selected:
+                items = [("title", "title", "", 0, article.title)]
+                for question in (questions or {}).get(article.article_id, []):
+                    item_id = f"q{question.question_order:03d}"
+                    text = question.content + "\n\n" + "\n".join(f"{letter}. {option}" for letter, option in zip("ABCD", question.options))
+                    items.append(("question", item_id, question.question_id, question.question_order, text))
+                    self.question_rows.append(dict(participant_id=participant_id, session_id=self.session_id,
+                        condition=condition, article_id=article.article_id, question_id=question.question_id,
+                        question_order=question.question_order, content=question.content,
+                        **{"Option" + letter: option for letter, option in zip("ABCD", question.options)},
+                        CorrectAnswer=question.correct_answer, source_path=question.source_path,
+                        source_sha256=question.source_sha256, status="not_presented", selected_answer="", selected_text="",
+                        is_correct="", start_event_id="", end_event_id="", start_timestamp_s="", end_timestamp_s="",
+                        response_event_id="", response_timestamp_s="", response_time_s="", **assignment_fields))
+                for phase, item_id, question_id, question_order, text in items:
+                    name = f"{condition}/{article.article_id}/{item_id}"
+                    self.auxiliary.append(dict(participant_id=participant_id, session_id=self.session_id, condition=condition,
+                        article_id=article.article_id, phase=phase, item_id=item_id, question_id=question_id,
+                        question_order=question_order, text=text, trial_id=f"c{condition[-1]}_{article.article_id}_{item_id}",
+                        screenshot_path=f"screenshots/{name}.png", ias_path=f"interest_areas/{name}.ias",
+                        aoi_preview_path=f"aoi_previews/{name}.png", screenshot_status="pending", screenshot_sha256="",
+                        ias_status="pending", ias_sha256="", width_px="", height_px="", status="not_presented",
+                        start_event_id="", end_event_id="", start_timestamp_s="", end_timestamp_s="", duration_s=""))
                 for index, (text, source_row) in enumerate(zip(article.pages, article.source_rows), 1):
                     self.sentences.append(dict(
                         participant_id=participant_id, session_id=self.session_id, condition=condition,
@@ -192,10 +228,20 @@ class SessionStore:
         # Exact text used in this session survives later edits to assets.
         snapshots = self.directory / "stimuli"
         snapshots.mkdir()
+        if questions:
+            from .questions import QUESTION_FIELDS
+            question_snapshots = snapshots / "questions"
+            question_snapshots.mkdir()
+            for article_id, selected in questions.items():
+                write_csv(question_snapshots / f"{article_id}.csv", QUESTION_FIELDS, [dict(
+                    article_id=question.article_id, question_id=question.question_id, question_order=question.question_order,
+                    content=question.content, **{"Option" + letter: option for letter, option in zip("ABCD", question.options)},
+                    CorrectAnswer=question.correct_answer) for question in selected])
         write_csv(self.directory / "user_logs.csv", LOG_FIELDS, [])
         for selected in articles.values():
             for article in selected:
                 (snapshots / (article.article_id + ".txt")).write_text(article.text, encoding="utf-8")
+                (snapshots / f"{article.article_id}_title.txt").write_text(article.title, encoding="utf-8")
                 for index, page in enumerate(article.pages, 1):
                     (snapshots / f"{article.article_id}_page{index:03d}.txt").write_text(page, encoding="utf-8")
         self.save()
@@ -205,6 +251,8 @@ class SessionStore:
             write_csv(self.directory / (condition + ".csv"), ARTICLE_FIELDS, rows)
         write_csv(self.directory / "sentence_pages.csv", SENTENCE_FIELDS, self.sentences)
         write_csv(self.directory / "word_aois.csv", WORD_AOI_FIELDS, self.words)
+        write_csv(self.directory / "auxiliary_pages.csv", AUXILIARY_FIELDS, self.auxiliary)
+        write_csv(self.directory / "question_responses.csv", QUESTION_RESPONSE_FIELDS, self.question_rows)
         temporary = self.directory / "session.json.tmp"
         temporary.write_text(json.dumps(self.metadata, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
         temporary.replace(self.directory / "session.json")

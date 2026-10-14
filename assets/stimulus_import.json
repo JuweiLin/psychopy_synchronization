@@ -5,7 +5,7 @@
   "source_document_sha256": "c59bcfbf36d40dc25e114021659c9702537f8c758e8ce9af34e5d4cea63eaef3",
   "schedule_version": "4.0-2026-10-13",
   "schedule_seed": 20261013,
-  "title_handling": "CSV header only; excluded from reading and TTS",
+  "title_handling": "CSV header displayed as a separate title page; excluded from WPM and TTS",
   "page_handling": "Preserve each body Screen cell and its hard line breaks",
   "questions_imported": false,
   "articles": {
@@ -379,5 +379,7 @@
   "assignment_sha256": "6d15ef7eb2d1dae0fb81a6e568ca291bfa0692d04794eda6b135ee00cbc4b4a6",
   "source_text_attribution": "OneStopQA / STARC, Berzak, Malmaud & Levy (2020)",
   "source_text_url": "https://aclanthology.org/2020.acl-main.507/",
-  "source_text_license": "CC BY-SA 4.0, as stated in the pilot workbook"
+  "source_text_license": "CC BY-SA 4.0, as stated in the pilot workbook",
+  "questions_directory": "questions",
+  "questions_import_manifest": "questions/import_manifest.json"
 }

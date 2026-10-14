@@ -15,6 +15,8 @@ data/<participant_id>/<session_id>/
   user_logs.csv
   sentence_pages.csv
   word_aois.csv
+  auxiliary_pages.csv
+  question_responses.csv
   stimuli/
   screenshots/
     baseline.png
@@ -41,7 +43,9 @@ In both conditions, each article starts with one central white `+` on the same b
 
 ## Data Viewer import
 
-Each page is now laid out as individual word TextStim objects. The program measures the chosen font, places words from left to right, and wraps between whitespace tokens when the configured width is reached. Explicit line breaks are retained. The text block is vertically centered and starts at the left edge of the configured text area. This replaces whole-sentence TextStim wrapping, so line breaks and spacing can differ from earlier sessions. Each CSV page remains one trial; oversized words and overflowing pages fail preparation rather than creating additional pages.
+Each body/title page is laid out as individual word TextStim objects. The program measures the chosen font, places words from left to right, and wraps between whitespace tokens when the configured width is reached. Explicit line breaks are retained. Each line is horizontally centered, and the text block is vertically centered. The same positions generate its AOIs. This layout is recorded as `centered_word_textstim_v2`; older sessions keep their original screenshots and coordinates. Each body CSV cell remains one trial; oversized words and overflowing pages fail preparation rather than creating additional pages.
+
+An article now has a separate title trial before its baseline, and question trials after its body. `phase=title` displays the CSV header without audio; `phase=question` displays one question and four answer buttons, with `question_id`, `question_order` and `selected_answer` trial variables. `TITLE_START`/`TITLE_END` and `QUESTION_START <id>`/`QUESTION_END <id>` mark their visible intervals. `QUESTION_RESPONSE <id> <letter>` marks the observed mouse response. `auxiliary_pages.csv` maps these trials to their screenshots, IAS files and timing. Question IAS files contain four button AOIs labelled `option_A`–`option_D`. Filter by `phase` for reading/pupil analyses; neither titles nor questions enter reading-speed calculations.
 
 The same positions generate word AOI rectangles. Each whitespace token is one AOI, including attached punctuation (`don't`, `sentence.`). IDs restart at 1 per page; repeated words have distinct IDs. Labels contain the word index and text, with non-ASCII characters escaped. `word_aois.csv` retains the exact word, line number, ID/label, zero-based/end-exclusive character offsets, coordinates and links to the trial, screenshot and IAS file. Coordinates are integer framebuffer pixels with an upper-left origin and inclusive right/bottom edges. Two-pixel padding is limited at the midpoint of each adjacent word gap to avoid overlap. Keyboard instructions have no AOIs.
 

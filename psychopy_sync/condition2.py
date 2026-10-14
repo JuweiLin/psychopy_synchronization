@@ -29,10 +29,7 @@ def run_condition2(view, articles, prepared, audio, log, store):
                 log.emit("ARTICLE_AUDIO_READY", "condition2", article.article_id,
                          detail=f"{len(sounds)} sentences preloaded")
                 log.flush()
-                view.wait_screen(f"Condition 2\n\nArticle {row['order']} / {len(articles)}\n\n"
-                                 f"Press {view.config.advance_key.upper()} to begin.\n"
-                                 "Read and listen. Sentences advance automatically.",
-                                 log, "ARTICLE_WAIT", article.article_id, condition="condition2")
+                view.show_title(article, log, "condition2")
                 row["status"] = "presenting"
                 store.save()
                 log.emit("TRIAL_START", "condition2", article.article_id)
@@ -46,8 +43,11 @@ def run_condition2(view, articles, prepared, audio, log, store):
                            start_timestamp_s=start["timestamp_s"], end_timestamp_s=end["timestamp_s"],
                            elapsed_duration_s=end["timestamp_s"] - start["timestamp_s"],
                            **store.article_durations("condition2", article.article_id))
+                store.save()
+                view.ask_questions(article, log, store, "condition2")
             except BaseException as exc:
-                row["status"] = "aborted" if isinstance(exc, ExperimentAborted) else "failed"
+                if row["status"] != "completed":
+                    row["status"] = "aborted" if isinstance(exc, ExperimentAborted) else "failed"
                 if start:
                     row.update(start_event_id=start["event_id"], start_timestamp_s=start["timestamp_s"])
                 if not end and presentation_started:

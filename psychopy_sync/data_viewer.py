@@ -32,7 +32,35 @@ class DataViewerExport:
         self.articles = {(condition, row["article_id"]): row for condition, rows in store.rows.items() for row in rows}
         self.active = None
         self.active_baseline = None
+        self.auxiliary = {(row["condition"], row["article_id"], row["item_id"]): row for row in store.auxiliary}
+        self.active_auxiliary = None
         self.passage = None
+
+    def prepare_auxiliary(self, view):
+        win = view.win
+        size = tuple(int(value) for value in win.size)
+        for row in self.store.auxiliary:
+            page = view.title_pages[row["article_id"]] if row["phase"] == "title" else (
+                view.question_pages[row["article_id"], row["question_order"]])
+            areas = page.word_areas if row["phase"] == "title" else page.interest_areas
+            image_path = self.store.directory / row["screenshot_path"]
+            ias_path = self.store.directory / row["ias_path"]
+            preview_path = self.store.directory / row["aoi_preview_path"]
+            for path in (image_path, ias_path, preview_path):
+                path.parent.mkdir(parents=True, exist_ok=True)
+            ias_path.write_text(interest_area_text(areas), encoding="ascii")
+            win.clearBuffer()
+            view.draw_auxiliary(row)
+            image = win.getMovieFrame(buffer="back")
+            try:
+                if image.size != size:
+                    raise RuntimeError(f"Screenshot size {image.size} differs from EyeLink display coordinates {size}")
+                image.save(str(image_path), format="PNG")
+                save_aoi_preview(image, areas, preview_path)
+            finally:
+                win.movieFrames.clear()
+            row.update(screenshot_status="saved", screenshot_sha256=sha256_file(image_path),
+                       ias_status="saved", ias_sha256=sha256_file(ias_path), width_px=size[0], height_px=size[1])
 
     def prepare_baseline(self, view):
         """Capture the real cross and derive its AOI from its visible pixels."""
@@ -77,6 +105,7 @@ class DataViewerExport:
         size = tuple(int(value) for value in win.size)
         self.store.words.clear()
         try:
+            self.prepare_auxiliary(view)
             self.prepare_baseline(view)
             for condition, selected in articles.items():
                 for article in selected:
@@ -127,7 +156,7 @@ class DataViewerExport:
 
     @staticmethod
     def _message(log, row, event, message, timestamp):
-        return log.emit(event, row["condition"], row["article_id"], page=row.get("sentence_index", ""),
+        return log.emit(event, row["condition"], row["article_id"], page=row.get("sentence_index", row.get("question_order", "")),
                         timestamp=timestamp, marker=message)
 
     def _assignment_variables(self, log, row, timestamp):
@@ -136,6 +165,43 @@ class DataViewerExport:
             for name in ("participant_id", "instruction_group", "allocation_slot", "list_id"):
                 value = assignment[name] or "none"
                 self._message(log, row, "DV_TRIAL_VAR", f"!V TRIAL_VAR {name} {value}", timestamp)
+
+    def _question_variables(self, log, row, timestamp):
+        question = row.get("phase") == "question"
+        for name, value in (("question_id", row["question_id"] if question else "none"),
+                            ("question_order", row["question_order"] if question else 0),
+                            ("selected_answer", "none")):
+            self._message(log, row, "DV_TRIAL_VAR", f"!V TRIAL_VAR {name} {value}", timestamp)
+
+    def start_auxiliary(self, log, condition, article_id, item_id, timestamp):
+        self.end_auxiliary(log, timestamp)
+        row = self.auxiliary[condition, article_id, item_id]
+        if row["screenshot_status"] != "saved" or row["ias_status"] != "saved":
+            raise RuntimeError(f"Image/AOIs were not prepared for {row['trial_id']}")
+        self.active_auxiliary = row
+        row["status"] = "presenting"
+        self._message(log, row, "DV_TRIAL_START", f"TRIALID {row['trial_id']}", timestamp)
+        for name in ("condition", "article_id", "phase"):
+            self._message(log, row, "DV_TRIAL_VAR", f"!V TRIAL_VAR {name} {row[name]}", timestamp)
+        self._assignment_variables(log, row, timestamp)
+        self._question_variables(log, row, timestamp)
+        self._message(log, row, "DV_TRIAL_VAR", "!V TRIAL_VAR sentence_index 0", timestamp)
+        self._message(log, row, "DV_IMAGE", f"!V IMGLOAD FILL {row['screenshot_path']}", timestamp)
+        self._message(log, row, "DV_AOI", f"!V IAREA FILE {row['ias_path']}", timestamp)
+        marker = "TITLE_START" if row["phase"] == "title" else f"QUESTION_START {row['question_id']}"
+        event = self._message(log, row, row["phase"].upper() + "_START", marker, timestamp)
+        row.update(start_event_id=event["event_id"], start_timestamp_s=timestamp)
+
+    def end_auxiliary(self, log, timestamp, status="completed"):
+        row = self.active_auxiliary
+        if row is None:
+            return
+        marker = "TITLE_END" if row["phase"] == "title" else f"QUESTION_END {row['question_id']}"
+        event = self._message(log, row, row["phase"].upper() + "_END", marker, timestamp)
+        self._message(log, row, "DV_TRIAL_END", "TRIAL_RESULT 0" if status == "completed" else "TRIAL_RESULT 1", timestamp)
+        row.update(status=status, end_event_id=event["event_id"], end_timestamp_s=timestamp,
+                   duration_s=timestamp - row["start_timestamp_s"])
+        self.active_auxiliary = None
 
     def start_page(self, log, condition, article_id, index, timestamp):
         self.end_baseline(log, timestamp)
@@ -151,6 +217,7 @@ class DataViewerExport:
         for name in ("condition", "article_id", "sentence_index"):
             self._message(log, row, "DV_TRIAL_VAR", f"!V TRIAL_VAR {name} {row[name]}", timestamp)
         self._assignment_variables(log, row, timestamp)
+        self._question_variables(log, row, timestamp)
         self._message(log, row, "DV_TRIAL_VAR", "!V TRIAL_VAR phase reading", timestamp)
         self._message(log, row, "DV_IMAGE", f"!V IMGLOAD FILL {row['screenshot_path']}", timestamp)
         self._message(log, row, "DV_WORD_AOI", f"!V IAREA FILE {row['ias_path']}", timestamp)
@@ -178,6 +245,7 @@ class DataViewerExport:
         self.active = None
 
     def start_baseline(self, log, condition, article_id, timestamp):
+        self.end_auxiliary(log, timestamp)
         self.end_page(log, timestamp)
         if self.active_baseline is not None:
             raise RuntimeError("The preceding baseline has not ended")
@@ -190,6 +258,7 @@ class DataViewerExport:
         for name in ("condition", "article_id"):
             self._message(log, row, "DV_TRIAL_VAR", f"!V TRIAL_VAR {name} {row[name]}", timestamp)
         self._assignment_variables(log, row, timestamp)
+        self._question_variables(log, row, timestamp)
         self._message(log, row, "DV_TRIAL_VAR", "!V TRIAL_VAR sentence_index 0", timestamp)
         self._message(log, row, "DV_TRIAL_VAR", "!V TRIAL_VAR phase baseline", timestamp)
         self._message(log, row, "DV_IMAGE", f"!V IMGLOAD FILL {row['baseline_screenshot_path']}", timestamp)
@@ -210,6 +279,7 @@ class DataViewerExport:
         self.active_baseline = None
 
     def end_phase(self, log, timestamp, status="completed"):
+        self.end_auxiliary(log, timestamp, status)
         if self.active is None:
             self.end_passage(log, timestamp, status)
         self.end_baseline(log, timestamp, status)
@@ -229,4 +299,6 @@ class DataViewerExport:
             self.active["status"] = "interrupted"
         if self.active_baseline is not None:
             self.active_baseline["baseline_status"] = "interrupted"
+        if self.active_auxiliary is not None:
+            self.active_auxiliary["status"] = "interrupted"
 

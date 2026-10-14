@@ -3,6 +3,7 @@
 from .condition1 import ExperimentAborted
 from .data_viewer import DataViewerExport
 from .word_layout import WordPage
+from .question_display import QuestionPage
 
 
 class ReadingDisplay:
@@ -14,6 +15,9 @@ class ReadingDisplay:
         self.visual = visual
         self.keyboard = Keyboard()
         self.data_viewer = None
+        self.title_pages = {}
+        self.question_pages = {}
+        self.question_mouse = None
         self.text_width = int(win.size[0] * config.text_width_fraction)
         self.text_height = int(win.size[1] * config.text_height_fraction)
         scale = self.text_scale
@@ -24,6 +28,8 @@ class ReadingDisplay:
         self.baseline_cross = visual.TextStim(win, text="+", units="pix", pos=(0, 0),
                                              height=2 * config.text_height_px / scale,
                                              font=config.font, color="white", autoLog=False)
+        self.title_footer = visual.TextStim(win, text=f"{config.advance_key.upper()}: begin reading", units="pix",
+            height=20 / scale, color="white", pos=(0, -win.size[1] * 0.44 / scale), autoLog=False)
 
     @property
     def text_scale(self):
@@ -35,8 +41,11 @@ class ReadingDisplay:
 
     def prepare(self, articles):
         prepared = {}
+        self.title_pages = {}
         scale = self.text_scale
         for article in articles:
+            self.title_pages[article.article_id] = WordPage(self.win, self.visual, self.config, article.title,
+                                                          self.text_width, self.text_height, scale)
             pages = []
             for index, text in enumerate(article.pages, 1):
                 try:
@@ -47,6 +56,110 @@ class ReadingDisplay:
                                      "adjust the prepared CSV page or the text layout") from exc
             prepared[article.article_id] = pages
         return prepared
+
+    def prepare_questions(self, question_sets):
+        for article_id, questions in question_sets.items():
+            for question in questions:
+                self.question_pages[article_id, question.question_order] = QuestionPage(self, question, len(questions))
+        if self.question_pages:
+            from psychopy import event
+            self.question_mouse = event.Mouse(win=self.win, visible=False)
+
+    def draw_auxiliary(self, row):
+        if row["phase"] == "title":
+            self.title_pages[row["article_id"]].draw()
+            self.title_footer.draw()
+        else:
+            self.question_pages[row["article_id"], row["question_order"]].draw()
+
+    def _auxiliary_on_flip(self, log, condition, article_id, item_id):
+        timing = {}
+        self.win.timeOnFlip(timing, "timestamp")
+        self.win.callOnFlip(lambda: self.data_viewer.start_auxiliary(log, condition, article_id, item_id, timing["timestamp"]))
+
+    def clear_auxiliary(self, log, status="completed"):
+        self.win.clearBuffer()
+        timing = {}
+        self.win.timeOnFlip(timing, "timestamp")
+        self.win.callOnFlip(lambda: self.data_viewer.end_auxiliary(log, timing["timestamp"], status))
+        self.win.flip()
+
+    def show_title(self, article, log, condition):
+        row = self.data_viewer.auxiliary[condition, article.article_id, "title"]
+        try:
+            self._wait(lambda: self.draw_auxiliary(row),
+                       lambda: self._auxiliary_on_flip(log, condition, article.article_id, "title"))
+            # It remains visible until the baseline's first flip.
+            log.flush()
+        except BaseException as exc:
+            try:
+                self.clear_auxiliary(log, "aborted" if isinstance(exc, ExperimentAborted) else "failed")
+            except Exception:
+                pass
+            raise
+
+    def ask_questions(self, article, log, store, condition):
+        rows = [row for row in store.question_rows if row["condition"] == condition and row["article_id"] == article.article_id]
+        if not rows:
+            return
+        mouse = self.question_mouse
+        mouse.setVisible(True)
+        store.metadata["questions_status"] = "running"
+        try:
+            for row in rows:
+                page = self.question_pages[article.article_id, row["question_order"]]
+                auxiliary = self.data_viewer.auxiliary[condition, article.article_id, f"q{row['question_order']:03d}"]
+                self.keyboard.clearEvents()
+                armed = not mouse.getPressed()[0]
+                try:
+                    page.draw()
+                    self._auxiliary_on_flip(log, condition, article.article_id, auxiliary["item_id"])
+                    self.win.flip()
+                    row.update(status="presenting", start_event_id=auxiliary["start_event_id"],
+                               start_timestamp_s=auxiliary["start_timestamp_s"])
+                    while True:
+                        self.controller.check_recording()
+                        if self.keyboard.getKeys(keyList=[self.config.quit_key], waitRelease=False, clear=True):
+                            raise ExperimentAborted("Escape pressed during questions")
+                        pressed = mouse.getPressed()[0]
+                        if armed and pressed:
+                            choice = page.choice_at(mouse)
+                            armed = False
+                            if choice is not None:
+                                response = log.emit("QUESTION_RESPONSE", condition, article.article_id,
+                                    page=row["question_order"], marker=f"QUESTION_RESPONSE {row['question_id']} {choice}")
+                                row.update(status="answered", selected_answer=choice, selected_text=row["Option" + choice],
+                                    is_correct=int(choice == row["CorrectAnswer"]), response_event_id=response["event_id"],
+                                    response_timestamp_s=response["timestamp_s"],
+                                    response_time_s=response["timestamp_s"] - row["start_timestamp_s"])
+                                log.emit("DV_TRIAL_VAR", condition, article.article_id, page=row["question_order"],
+                                         marker=f"!V TRIAL_VAR selected_answer {choice}")
+                                break
+                        elif not pressed:
+                            armed = True
+                        page.draw()
+                        self.win.flip()
+                    self.clear_auxiliary(log)
+                    row.update(status="completed", end_event_id=auxiliary["end_event_id"],
+                               end_timestamp_s=auxiliary["end_timestamp_s"])
+                except BaseException as exc:
+                    row["status"] = "aborted" if isinstance(exc, (ExperimentAborted, KeyboardInterrupt)) else "failed"
+                    try:
+                        self.clear_auxiliary(log, row["status"])
+                    except Exception:
+                        pass
+                    row.update(end_event_id=auxiliary["end_event_id"], end_timestamp_s=auxiliary["end_timestamp_s"])
+                    raise
+                finally:
+                    log.flush()
+                    store.save()
+            store.metadata["questions_status"] = "completed" if all(row["status"] == "completed" for row in store.question_rows) else "pending"
+        except BaseException as exc:
+            store.metadata["questions_status"] = "aborted" if isinstance(exc, (ExperimentAborted, KeyboardInterrupt)) else "failed"
+            raise
+        finally:
+            mouse.setVisible(False)
+            store.save()
 
     def export_pages(self, store, articles, prepared):
         self.prompt.text = "Preparing sentence images and word interest areas. Please wait."

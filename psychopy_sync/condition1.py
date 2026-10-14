@@ -13,8 +13,7 @@ def run_condition1(view, articles, prepared, log, store):
     for article, row in zip(articles, store.rows["condition1"]):
         pages = prepared[article.article_id]
         row["page_count"] = len(pages)
-        view.wait_screen(f"Article {row['order']} / {len(articles)}\n\nPress {view.config.advance_key.upper()} to begin.", log,
-                         "ARTICLE_WAIT", article.article_id)
+        view.show_title(article, log, "condition1")
         row["status"] = "presenting"
         store.save()
         start, end = {}, {}
@@ -31,8 +30,11 @@ def run_condition1(view, articles, prepared, log, store):
                        start_timestamp_s=start["timestamp_s"], end_timestamp_s=end["timestamp_s"],
                        elapsed_duration_s=end["timestamp_s"] - start["timestamp_s"],
                        **store.article_durations("condition1", article.article_id))
+            store.save()
+            view.ask_questions(article, log, store, "condition1")
         except BaseException as exc:
-            row["status"] = "aborted" if isinstance(exc, ExperimentAborted) else "failed"
+            if row["status"] != "completed":
+                row["status"] = "aborted" if isinstance(exc, ExperimentAborted) else "failed"
             if start:
                 row.update(start_event_id=start["event_id"], start_timestamp_s=start["timestamp_s"])
             if not end:

@@ -14,6 +14,7 @@ from .display import create_window
 from .event_log import EventLog, SessionStore
 from .eyelink import DummyEyeLinkController, EyeLinkController
 from .reading_display import ReadingDisplay
+from .questions import load_question_sets
 from .session_audio import SessionAudio
 
 
@@ -28,7 +29,8 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
         participant_id = assignment.participant_id
         config = replace(config, dummy_mode=participant_id == "0")
     articles = load_experiment_articles(config, assignment)
-    store = SessionStore(config, participant_id, articles, assignment=assignment)
+    questions = load_question_sets(config, articles["condition1"] + articles["condition2"])
+    store = SessionStore(config, participant_id, articles, assignment=assignment, questions=questions)
     controller = DummyEyeLinkController() if config.dummy_mode else EyeLinkController(eyelink_config or EyeLinkConfig())
     win, view, log, summary = None, None, None, None
     audio = None
@@ -46,6 +48,7 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
         store.save()
         view = ReadingDisplay(win, config, controller)
         prepared = view.prepare(articles["condition1"] + articles["condition2"])
+        view.prepare_questions(questions)
         view.export_pages(store, articles, prepared)
         if not config.dummy_mode:
             controller.configure_display(win)

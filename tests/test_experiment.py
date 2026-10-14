@@ -65,6 +65,18 @@ class FakeView:
 
     export_pages = ReadingDisplay.export_pages
 
+    def prepare_questions(self, questions):
+        pass
+
+    def ask_questions(self, article, log, store, condition):
+        pass
+
+    def show_title(self, article, log, condition):
+        self.win.now += 100
+        self.data_viewer.start_auxiliary(log, condition, article.article_id, "title", self.win.now)
+        self.win.now += 2  # Title duration must stay outside the reading denominator.
+        log.flush()
+
     def show_saving(self):
         pass
 
@@ -124,9 +136,13 @@ class ExperimentTests(unittest.TestCase):
             defaultClock=types.SimpleNamespace(getTime=lambda: self.win.now)))
         for patcher in (patch.dict("sys.modules", {"psychopy": psychopy}),
                         patch("psychopy_sync.experiment.load_assignment", return_value=None),
+                        patch("psychopy_sync.experiment.load_question_sets", return_value={}),
                         patch("psychopy_sync.experiment.create_window", return_value=self.win),
                         patch("psychopy_sync.experiment.EyeLinkController", return_value=self.controller),
                         patch("psychopy_sync.experiment.ReadingDisplay", FakeView),
+                        patch.object(DataViewerExport, "prepare_auxiliary", autospec=True,
+                              side_effect=lambda exporter, view: [row.update(screenshot_status="saved", ias_status="saved")
+                                                                  for row in exporter.store.auxiliary]),
                         patch.object(DataViewerExport, "prepare_baseline", autospec=True,
                               side_effect=lambda exporter, view: exporter.store.metadata.update(baseline_assets_status="saved")),
                         patch("psychopy_sync.data_viewer.save_aoi_preview",
@@ -188,10 +204,12 @@ class ExperimentTests(unittest.TestCase):
         self.assertTrue(all((directory / r["screenshot_path"]).is_file() for r in pages))
         self.assertEqual(self.win.movieFrames, [])
         markers = [call.args[0] for call in self.controller.send_marker.call_args_list]
-        self.assertEqual(len([m for m in markers if m.startswith("TRIALID ")]), 4)
+        self.assertEqual(len([m for m in markers if m.startswith("TRIALID ")]), 6)
         self.assertEqual(markers.count("SENTENCE_ONSET"), 2)
         self.assertEqual(markers.count("SENTENCE_OFFSET"), 2)
-        self.assertEqual(markers.count("TRIAL_RESULT 0"), 4)
+        self.assertEqual(markers.count("TRIAL_RESULT 0"), 6)
+        self.assertEqual(markers.count("TITLE_START"), 2)
+        self.assertEqual(markers.count("TITLE_END"), 2)
         self.assertEqual(markers.count("BASELINE_START"), 2)
         self.assertEqual(markers.count("BASELINE_END"), 2)
         self.assertTrue(all(float(row["baseline_duration_s"]) == 1.5

@@ -52,6 +52,11 @@ class DataViewerTests(unittest.TestCase):
             side_effect=lambda exporter, view: exporter.store.metadata.update(baseline_assets_status="saved"))
         baseline.start()
         self.addCleanup(baseline.stop)
+        auxiliary = patch.object(DataViewerExport, "prepare_auxiliary", autospec=True,
+            side_effect=lambda exporter, view: [row.update(screenshot_status="saved", ias_status="saved")
+                                                for row in exporter.store.auxiliary])
+        auxiliary.start()
+        self.addCleanup(auxiliary.stop)
         self.drawn = []
 
         def capture(buffer):

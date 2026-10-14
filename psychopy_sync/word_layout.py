@@ -82,9 +82,13 @@ class WordPage:
         total_height = (line + 1) * line_height + line * line_gap
         if total_height > height:
             raise ValueError("Page exceeds the configured display height")
-        origin_x = (screen_width - width) / 2
+        self.height_px = total_height
+        line_widths = {}
+        for slot in slots:
+            line_widths[slot["line"]] = max(line_widths.get(slot["line"], 0), slot["x"] + slot["width"])
         origin_y = (screen_height - total_height) / 2
         for index, slot in enumerate(slots, 1):
+            origin_x = (screen_width - line_widths[slot["line"]]) / 2
             left = origin_x + slot["x"]
             top = origin_y + slot["line"] * (line_height + line_gap)
             slot["stimulus"].pos = ((left - screen_width / 2) / scale,

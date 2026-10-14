@@ -119,6 +119,8 @@ class Condition2Tests(unittest.TestCase):
             self.win.flip()
 
         self.view.wait_screen = begin
+        self.view.show_title = lambda article, log, condition: begin(article.title, log, "ARTICLE_WAIT", article.article_id, condition)
+        self.view.ask_questions = MagicMock()
 
         def preload(cached, allow_demo, speaker):
             self.assertTrue(allow_demo)

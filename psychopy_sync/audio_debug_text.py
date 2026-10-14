@@ -55,6 +55,7 @@ class ScrollableDebugText:
                 current = word
             self.lines.append(current)
         self.lines = self.lines or [""]
+        self.line_widths = [width(line) for line in self.lines]
         self.max_offset = max(0, len(self.lines) - self.visible_count)
         self.labels = [view.visual.TextStim(view.win, text="", **options) for _ in range(self.visible_count)]
         self.footer = view.visual.TextStim(view.win, text="", units="pix", height=16 / scale,
@@ -101,7 +102,7 @@ class ScrollableDebugText:
             if line >= len(self.lines):
                 break
             label.text = self.lines[line]
-            label.pos = (-self.view.text_width / 2 / scale,
+            label.pos = (-self.line_widths[line] / 2 / scale,
                          (self.view.text_height / 2 - index * self.line_height) / scale)
             label.draw()
         if self.max_offset:

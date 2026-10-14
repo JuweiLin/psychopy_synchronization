@@ -116,7 +116,7 @@ def main():
                     source_text_url="https://aclanthology.org/2020.acl-main.507/",
                     source_text_license="CC BY-SA 4.0, as stated in the pilot workbook",
                     schedule_version="4.0-2026-10-13", schedule_seed=20261013,
-                    title_handling="CSV header only; excluded from reading and TTS",
+                    title_handling="CSV header displayed as a separate title page; excluded from WPM and TTS",
                     page_handling="Preserve each body Screen cell and its hard line breaks",
                     questions_imported=False, articles={})
     for identifier, article in articles.items():

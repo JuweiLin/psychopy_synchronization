@@ -21,6 +21,9 @@ The experiment measures Condition 1 reading speed, then presents Condition 2 sen
 | `scripts/import_study_materials.py`, `assets/stimulus_import.json` | Imports body Screens and the frozen schedule from XLSX/DOCX, recording provenance and excluding questions |
 | `psychopy_sync/reading_display.py` | Prepares pages, shows one 1500 ms cross per article, handles keys, binds events to flips and schedules PTB sentence playback |
 | `psychopy_sync/word_layout.py` | Measures and positions word TextStim objects; produces matching word AOI rectangles and IAS text |
+| `psychopy_sync/questions.py`, `assets/questions/` | One question CSV per article; validates identities, fixed order, options and correct letters |
+| `psychopy_sync/question_display.py` | Centered question pages and four clickable answer buttons with matching AOIs |
+| `scripts/import_questions.py` | Extracts pilot questions and remaps official answer texts to the pilot's shuffled choices, recording provenance |
 | `psychopy_sync/condition1.py` | Runs articles, pairs onset/end events and saves complete reading speed |
 | `psychopy_sync/condition2.py` | Waits/preloads each article, presents sentence text/audio and saves complete/partial presentation timing |
 | `psychopy_sync/reading_speed.py` | Calculates speed from total words and summed article reading durations |
