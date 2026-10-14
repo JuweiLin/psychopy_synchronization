@@ -1,6 +1,6 @@
 # EDF and sentence images
 
-Clear **Dummy mode (no EyeLink)** in the login window and connect a real EyeLink Host. Dummy mode produces local logs and sentence images, but no eye samples or EDF. The separate calibration check is not an experiment recording.
+Enter a participant ID from **1–200** in the login window and connect a real EyeLink Host. ID **0** selects dummy mode and produces local logs and page images, but no eye samples or EDF. The separate calibration check is not an experiment recording.
 
 Launch using **Start Experiment**, enter the participant ID, complete calibration/validation and run the reading conditions. Leave the application running while the final **Saving session data. Please wait.** screen is shown. Normal completion and Escape both attempt to stop recording, close the Host EDF and download it before disconnecting. The result window reports the saved EDF path and byte count, or the Host filename to recover if transfer fails.
 
@@ -49,7 +49,7 @@ The same positions generate word AOI rectangles. Each whitespace token is one AO
 
 1. Copy the **whole session folder**, preserving the EDF, `screenshots/` and `interest_areas/` hierarchy.
 2. Import `eyelink.edf` into EyeLink Data Viewer. Images are referenced relative to that EDF's location. If the software asks for an image directory, point it to the copied session folder and keep the relative hierarchy intact.
-3. Each article has one baseline trial followed by one trial per sentence. Trial variables `condition`, `article_id`, `sentence_index` and `phase` identify each trial. Baselines have `phase=baseline` and `sentence_index=0`; sentences have `phase=reading`. Join the baseline and reading results by condition and article ID.
+3. Each article has one baseline trial followed by one trial per body page. Trial variables `condition`, `article_id`, `sentence_index` and `phase` identify each trial; the existing `sentence_index` names the supplied page even when it contains multiple sentences. Baselines have `phase=baseline` and `sentence_index=0`; pages have `phase=reading`. `participant_id`, `instruction_group`, `allocation_slot` and `list_id` record the frozen assignment. Join baseline and reading results within participant/session by condition and article ID.
 4. Inspect the background screenshot and gaze overlay. Confirm text and gaze use the same screen coordinates.
 5. Word AOIs load through the trial's `!V IAREA FILE` message. Enable interest-area outlines in the Spatial Overlay view and inspect them against the words. There is no need to use **Auto Segment Image into Interest Areas**. Compare `aoi_previews/` and `word_aois.csv` if anything looks misplaced. Older EDFs without the IAS message still need manual association of compatible AOI files or Data Viewer's segmentation tools; updating the program does not add AOIs to old recordings.
 6. Export the required fixation, interest-area or sample reports from Data Viewer. These reports are analysis outputs; the experiment itself saves the raw EDF and event/page tables.

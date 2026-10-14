@@ -12,18 +12,16 @@ import threading
 import uuid
 
 from .config import ExperimentConfig, PROJECT_ROOT
-from .event_log import validate_participant_id
+from .event_log import validate_login_participant_id
 from .launcher_bootstrap import required_modules
 from .package_paths import add_psychopy_packages, psychopy_package_paths
 from .server_check import check_gpu_server
 
 
-def experiment_command(participant_id, result_path, dummy_mode=None):
-    validate_participant_id(participant_id)
+def experiment_command(participant_id, result_path):
+    participant_id = validate_login_participant_id(participant_id)
     command = [sys.executable, "-m", "psychopy_sync.desktop_runner", "--participant-id",
                participant_id, "--result-file", str(result_path)]
-    if dummy_mode is not None:
-        command.append("--dummy-mode" if dummy_mode else "--eyelink-mode")
     return command
 
 
@@ -94,19 +92,14 @@ def main():
 
             layout.Add(label("Reading Experiment", 24, "#17253C"), 0, wx.LEFT | wx.TOP, 32)
             layout.AddSpacer(28)
-            layout.Add(label("Participant ID", 13, "#40516A"), 0, wx.LEFT, 32)
+            layout.Add(label("Participant ID (0–200)", 13, "#40516A"), 0, wx.LEFT, 32)
             self.participant = wx.TextCtrl(panel, style=wx.TE_PROCESS_ENTER, size=(-1, 42))
             self.participant.SetFont(wx.Font(18, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL))
-            self.participant.SetHint("S001")
+            self.participant.SetHint("1")
             layout.AddSpacer(10)
             layout.Add(self.participant, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 32)
             layout.AddSpacer(10)
-            layout.Add(label("1–32 letters, numbers, _ or -", 11, "#63708A"), 0, wx.LEFT, 32)
-            layout.AddSpacer(16)
-            self.dummy_toggle = wx.CheckBox(panel, label="Dummy mode (no EyeLink)")
-            self.dummy_toggle.SetValue(self.config.dummy_mode)
-            self.dummy_toggle.Bind(wx.EVT_CHECKBOX, self.change_mode)
-            layout.Add(self.dummy_toggle, 0, wx.LEFT | wx.RIGHT, 32)
+            layout.Add(label("0: dummy session   |   1–200: EyeLink session", 11, "#63708A"), 0, wx.LEFT, 32)
             self.error = label("", 11, "#B42318")
             layout.AddSpacer(10)
             layout.Add(self.error, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 32)
@@ -115,7 +108,7 @@ def main():
             self.start_button.Disable()
             self.start_button.Bind(wx.EVT_BUTTON, self.start)
             self.participant.Bind(wx.EVT_TEXT_ENTER, self.start)
-            self.participant.Bind(wx.EVT_TEXT, lambda event: self.error.SetLabel(""))
+            self.participant.Bind(wx.EVT_TEXT, self.participant_changed)
             layout.AddSpacer(12)
             layout.Add(self.start_button, 0, wx.EXPAND | wx.LEFT | wx.RIGHT, 32)
             layout.AddSpacer(16)
@@ -141,11 +134,19 @@ def main():
             self.participant.SetFocus()
             wx.CallAfter(self.check_server)
 
-        def change_mode(self, event):
+        def participant_changed(self, event):
             if self.process is not None:
                 return
-            self.config = replace(self.config, dummy_mode=self.dummy_toggle.GetValue())
             self.error.SetLabel("")
+            # Editing an ID always cancels a launch pending on a GPU check.
+            self.pending_participant = None
+            try:
+                dummy_mode = validate_login_participant_id(self.participant.GetValue().strip()) == "0"
+            except ValueError:
+                dummy_mode = False
+            if self.config.dummy_mode == dummy_mode:
+                return
+            self.config = replace(self.config, dummy_mode=dummy_mode)
             self.status_title.SetLabel("Dummy mode — no eye tracking" if self.config.dummy_mode else "EyeLink recording mode")
             self.status.SetValue("EyeLink calibration and recording will be skipped." if self.config.dummy_mode else
                                  "EyeLink calibration and continuous recording are enabled.")
@@ -206,11 +207,12 @@ def main():
                 return
             participant_id = self.participant.GetValue().strip()
             try:
-                validate_participant_id(participant_id)
-            except ValueError:
-                self.error.SetLabel("Enter 1–32 letters, numbers, underscores or hyphens.")
+                participant_id = validate_login_participant_id(participant_id)
+            except ValueError as exc:
+                self.error.SetLabel(str(exc))
                 self.participant.SetFocus()
                 return
+            self.participant.ChangeValue(participant_id)
             # Also refresh discovery if packages were installed while the
             # login window was open. This never imports the EyeLink SDK.
             add_psychopy_packages()
@@ -235,6 +237,8 @@ def main():
 
         def launch_session(self, participant_id):
             try:
+                if validate_login_participant_id(self.participant.GetValue().strip()) != participant_id:
+                    return
                 self.temporary = tempfile.TemporaryDirectory(prefix="reading-experiment-")
                 self.result_path = Path(self.temporary.name) / "result.json"
                 logs = self.config.output_dir / "launcher_logs"
@@ -242,8 +246,7 @@ def main():
                 stamp = datetime.now().strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8]
                 self.log_path = logs / f"{stamp}.log"
                 self.log_stream = self.log_path.open("w", encoding="utf-8")
-                self.process = subprocess.Popen(experiment_command(participant_id, self.result_path,
-                                                                   dummy_mode=self.config.dummy_mode),
+                self.process = subprocess.Popen(experiment_command(participant_id, self.result_path),
                                                 cwd=PROJECT_ROOT, stdin=subprocess.DEVNULL,
                                                 stdout=self.log_stream, stderr=subprocess.STDOUT)
             except Exception as exc:
@@ -255,7 +258,6 @@ def main():
             self.participant.SetValue(participant_id)
             self.start_button.Disable()
             self.participant.Disable()
-            self.dummy_toggle.Disable()
             self.gpu_check_button.Disable()
             self.status_title.SetLabel("Session in progress")
             self.status.SetValue("Continue in the experiment window. Press Escape to stop.")
@@ -284,7 +286,6 @@ def main():
             self.start_button.Enable(self.server_result is not None and self.server_result.can_start)
             self.gpu_check_button.Enable()
             self.participant.Enable()
-            self.dummy_toggle.Enable()
             self.SetClientSize((540, 600))
             self.Layout()
             self.Show()

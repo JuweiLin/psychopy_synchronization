@@ -1,0 +1,383 @@
+{
+  "source_workbook": "TTS_Pilot_Participant_Review.xlsx",
+  "source_document": "Personalized_TTS_Randomization_and_Stimulus_Pool.docx",
+  "source_workbook_sha256": "19fc3af27302aa4c4618122a4b15bdd03ee678d8db28884b01af69aa344e365d",
+  "source_document_sha256": "c59bcfbf36d40dc25e114021659c9702537f8c758e8ce9af34e5d4cea63eaef3",
+  "schedule_version": "4.0-2026-10-13",
+  "schedule_seed": 20261013,
+  "title_handling": "CSV header only; excluded from reading and TTS",
+  "page_handling": "Preserve each body Screen cell and its hard line breaks",
+  "questions_imported": false,
+  "articles": {
+    "A02": {
+      "title": "A New Form of Lie Detector Test",
+      "body_page_count": 9,
+      "word_count": 608,
+      "source_screen_ids": [
+        "A02Screen2",
+        "A02Screen3",
+        "A02Screen4",
+        "A02Screen5",
+        "A02Screen6",
+        "A02Screen7",
+        "A02Screen8",
+        "A02Screen9",
+        "A02Screen10"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "csv_sha256": "d6549e0de125f11a6594882a029a76a567d7bd59ce8e7e991ce625f42fda13ec"
+    },
+    "A03": {
+      "title": "Autumn-Born Children Better at Sports Says Study",
+      "body_page_count": 11,
+      "word_count": 649,
+      "source_screen_ids": [
+        "A03Screen2",
+        "A03Screen3",
+        "A03Screen4",
+        "A03Screen5",
+        "A03Screen6",
+        "A03Screen7",
+        "A03Screen8",
+        "A03Screen9",
+        "A03Screen10",
+        "A03Screen11",
+        "A03Screen12"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "csv_sha256": "3d84aa8cb3d608f3c4119b06ae03d7a42441df6274341321b0c940ea3c0ab023"
+    },
+    "A05": {
+      "title": "Bolivians Demand the Right to Chew Coca Leaves",
+      "body_page_count": 12,
+      "word_count": 740,
+      "source_screen_ids": [
+        "A05Screen2",
+        "A05Screen3",
+        "A05Screen4",
+        "A05Screen5",
+        "A05Screen6",
+        "A05Screen7",
+        "A05Screen8",
+        "A05Screen9",
+        "A05Screen10",
+        "A05Screen11",
+        "A05Screen12",
+        "A05Screen13"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18
+      ],
+      "csv_sha256": "32d6f2d317fc7776e3fe36829756f80a51d4238147be0011194df15c1c393edf"
+    },
+    "A08": {
+      "title": "Four New Elements Find a Place on Periodic Table",
+      "body_page_count": 11,
+      "word_count": 652,
+      "source_screen_ids": [
+        "A08Screen2",
+        "A08Screen3",
+        "A08Screen4",
+        "A08Screen5",
+        "A08Screen6",
+        "A08Screen7",
+        "A08Screen8",
+        "A08Screen9",
+        "A08Screen10",
+        "A08Screen11",
+        "A08Screen12"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "csv_sha256": "c7e36ecf2900206136d6512ed6135ef16f597a0d635be0a419b6f08deb831740"
+    },
+    "A09": {
+      "title": "Google Introduces its Driverless Car",
+      "body_page_count": 11,
+      "word_count": 731,
+      "source_screen_ids": [
+        "A09Screen2",
+        "A09Screen3",
+        "A09Screen4",
+        "A09Screen5",
+        "A09Screen6",
+        "A09Screen7",
+        "A09Screen8",
+        "A09Screen9",
+        "A09Screen10",
+        "A09Screen11",
+        "A09Screen12"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "csv_sha256": "1f5858b6b243550352086da683147f6ae0f9621caf52f3113a9704b18fd802b0"
+    },
+    "A12": {
+      "title": "Insects Could be the Planets Next Food Source",
+      "body_page_count": 9,
+      "word_count": 531,
+      "source_screen_ids": [
+        "A12Screen2",
+        "A12Screen3",
+        "A12Screen4",
+        "A12Screen5",
+        "A12Screen6",
+        "A12Screen7",
+        "A12Screen8",
+        "A12Screen9",
+        "A12Screen10"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "csv_sha256": "e4e05a2dfa477128786b28d9de32a5fbdbe8dd4fd37000f6d2939e0d6f9bd74b"
+    },
+    "A15": {
+      "title": "Love Hormone Helps Autistic Children Bond with Others",
+      "body_page_count": 11,
+      "word_count": 718,
+      "source_screen_ids": [
+        "A15Screen2",
+        "A15Screen3",
+        "A15Screen4",
+        "A15Screen5",
+        "A15Screen6",
+        "A15Screen7",
+        "A15Screen8",
+        "A15Screen9",
+        "A15Screen10",
+        "A15Screen11",
+        "A15Screen12"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "csv_sha256": "0e7a5fa96b88dfed722dcc10ff28f3f0264401040bf5530d2026f0129457d824"
+    },
+    "A19": {
+      "title": "On the Trail of the Wolf",
+      "body_page_count": 11,
+      "word_count": 648,
+      "source_screen_ids": [
+        "A19Screen2",
+        "A19Screen3",
+        "A19Screen4",
+        "A19Screen5",
+        "A19Screen6",
+        "A19Screen7",
+        "A19Screen8",
+        "A19Screen9",
+        "A19Screen10",
+        "A19Screen11",
+        "A19Screen12"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "csv_sha256": "7c3a5eb368cd3244dab769bd6f34911f1d1f8518ca8c3c0bbe8e6d49d4e6d343"
+    },
+    "A20": {
+      "title": "Philip Pullman Illegal Downloading Is Moral Squalor",
+      "body_page_count": 9,
+      "word_count": 578,
+      "source_screen_ids": [
+        "A20Screen2",
+        "A20Screen3",
+        "A20Screen4",
+        "A20Screen5",
+        "A20Screen6",
+        "A20Screen7",
+        "A20Screen8",
+        "A20Screen9",
+        "A20Screen10"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "csv_sha256": "6c6c53b2af154fc419c9fd983cc5c0fd25b2e4a39695dd130a9d55a700a92e56"
+    },
+    "A28": {
+      "title": "Why You Should Start Work at 10AM",
+      "body_page_count": 9,
+      "word_count": 600,
+      "source_screen_ids": [
+        "A28Screen2",
+        "A28Screen3",
+        "A28Screen4",
+        "A28Screen5",
+        "A28Screen6",
+        "A28Screen7",
+        "A28Screen8",
+        "A28Screen9",
+        "A28Screen10"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "csv_sha256": "e47629fa302dfccff9a315ab92d0b0379511f30fca987a47ed5207d6d6177fa5"
+    },
+    "A29": {
+      "title": "Why is Sweden Closing its Prisons?",
+      "body_page_count": 9,
+      "word_count": 574,
+      "source_screen_ids": [
+        "A29Screen2",
+        "A29Screen3",
+        "A29Screen4",
+        "A29Screen5",
+        "A29Screen6",
+        "A29Screen7",
+        "A29Screen8",
+        "A29Screen9",
+        "A29Screen10"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "csv_sha256": "8dc65b3f501f161be4874cdc9d89a99ff0816cf950d9d053f79a0831d10c1e46"
+    },
+    "A30": {
+      "title": "Will Drones Soon Be Delivering Packages to Your Doorstep",
+      "body_page_count": 11,
+      "word_count": 666,
+      "source_screen_ids": [
+        "A30Screen2",
+        "A30Screen3",
+        "A30Screen4",
+        "A30Screen5",
+        "A30Screen6",
+        "A30Screen7",
+        "A30Screen8",
+        "A30Screen9",
+        "A30Screen10",
+        "A30Screen11",
+        "A30Screen12"
+      ],
+      "source_excel_rows": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
+      "csv_sha256": "d37825020da563eabbb8cc859c306659a3067e999eb886a4fc7b19d110479bd1"
+    }
+  },
+  "assignment_sha256": "6d15ef7eb2d1dae0fb81a6e568ca291bfa0692d04794eda6b135ee00cbc4b4a6",
+  "source_text_attribution": "OneStopQA / STARC, Berzak, Malmaud & Levy (2020)",
+  "source_text_url": "https://aclanthology.org/2020.acl-main.507/",
+  "source_text_license": "CC BY-SA 4.0, as stated in the pilot workbook"
+}

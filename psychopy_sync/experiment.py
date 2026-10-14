@@ -1,10 +1,12 @@
 """Measure reading speed, then present sentence text/audio with optional EyeLink."""
 
 import argparse
+from dataclasses import replace
 import json
 import logging
 
 from .articles import load_experiment_articles
+from .assignments import load_assignment
 from .condition1 import ExperimentAborted, run_condition1
 from .condition2 import run_condition2
 from .config import DisplayConfig, ExperimentConfig, EyeLinkConfig
@@ -18,8 +20,12 @@ from .session_audio import SessionAudio
 def run_experiment(participant_id, config=None, display_config=None, eyelink_config=None):
     config = config or ExperimentConfig()
     display_config = display_config or DisplayConfig(assumed_refresh_rate_hz=None)
-    articles = load_experiment_articles(config)
-    store = SessionStore(config, participant_id, articles)
+    assignment = load_assignment(config, participant_id)
+    if assignment is not None:
+        participant_id = assignment.participant_id
+        config = replace(config, dummy_mode=participant_id == "0")
+    articles = load_experiment_articles(config, assignment)
+    store = SessionStore(config, participant_id, articles, assignment=assignment)
     controller = DummyEyeLinkController() if config.dummy_mode else EyeLinkController(eyelink_config or EyeLinkConfig())
     win, view, log, summary = None, None, None, None
     audio = None
@@ -55,6 +61,8 @@ def run_experiment(participant_id, config=None, display_config=None, eyelink_con
             store.metadata.update(status="recording", edf_status="recording")
         store.save()
         log.emit("SESSION_START")
+        if assignment is not None:
+            log.emit("PARTICIPANT_ASSIGNMENT", detail=json.dumps(assignment.metadata(), ensure_ascii=True))
         if config.dummy_mode:
             view.wait_screen("Dummy mode. No eye tracking will be recorded.\n\n"
                              f"Press {config.advance_key.upper()} to start Condition 1.", log, "DUMMY_READY")

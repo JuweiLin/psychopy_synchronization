@@ -43,7 +43,7 @@ class LoginGpuChecks(unittest.TestCase):
             self.addCleanup(item.stop)
         main()
         frame = frames[0]
-        frame.participant.GetValue.return_value = "S001"
+        frame.participant.GetValue.return_value = "1"
 
         def dispatch():
             function, args = callbacks.popleft()
@@ -87,11 +87,11 @@ class LoginGpuChecks(unittest.TestCase):
         frame.start(None)
         frame.launch_session.assert_not_called()
         dispatch()
-        frame.launch_session.assert_called_once_with("S001")
-        frame.check_server("S001")
+        frame.launch_session.assert_called_once_with("1")
+        frame.check_server("1")
         frame.close(None)
         dispatch()
-        frame.launch_session.assert_called_once_with("S001")
+        frame.launch_session.assert_called_once_with("1")
 
 
 if __name__ == "__main__":

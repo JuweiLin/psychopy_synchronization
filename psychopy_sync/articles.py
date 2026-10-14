@@ -38,7 +38,7 @@ class Article:
     pool_article_ids: tuple
 
 
-def load_experiment_articles(config):
+def load_experiment_articles(config, assignment=None):
     root = Path(config.assets_dir).resolve()
     folder = (root / config.articles_folder).resolve()
     if not folder.is_relative_to(root):
@@ -60,7 +60,8 @@ def load_experiment_articles(config):
     if len(files) < required:
         raise ValueError(f"Article pool requires {required} distinct articles "
                          f"(condition1={config.condition1_count}, condition2={config.condition2_count}); found {len(files)}")
-    seed = config.random_seed if config.random_seed is not None else secrets.randbits(64)
+    seed = assignment.seed if assignment is not None else (
+        config.random_seed if config.random_seed is not None else secrets.randbits(64))
     pool_ids = tuple(path.stem for path in files)
     pool = []
     for path in files:
@@ -91,7 +92,17 @@ def load_experiment_articles(config):
             source_rows=tuple(source_rows), sampling_seed=seed,
             source_sha256=hashlib.sha256(raw).hexdigest(), pool_article_ids=pool_ids,
         ))
-    # One draw without replacement makes both conditions disjoint and orders random.
+    if assignment is not None:
+        assigned = {"condition1": assignment.condition1_articles, "condition2": assignment.condition2_articles}
+        by_id = {article["article_id"]: article for article in pool}
+        missing = sorted({identifier for ids in assigned.values() for identifier in ids} - by_id.keys())
+        if missing:
+            raise ValueError("Assigned article CSVs are missing: " + ", ".join(missing))
+        if any(len(ids) != getattr(config, condition + "_count") for condition, ids in assigned.items()):
+            raise ValueError("Configured article counts differ from the frozen assignment")
+        return {condition: [Article(condition=condition, **by_id[identifier]) for identifier in ids]
+                for condition, ids in assigned.items()}
+    # Internal random-pool API retained for callers without a frozen assignment.
     drawn = random.Random(seed).sample(pool, required)
     selected = {"condition1": [], "condition2": []}
     for position, article in enumerate(drawn):

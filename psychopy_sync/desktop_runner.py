@@ -8,7 +8,7 @@ import traceback
 
 from .condition1 import ExperimentAborted
 from .config import ExperimentConfig
-from .event_log import validate_participant_id
+from .event_log import validate_login_participant_id
 
 
 def session_details(metadata, directory=None):
@@ -21,17 +21,14 @@ def session_details(metadata, directory=None):
     return result
 
 
-def execute(participant_id, result_path, runner=None, dummy_mode=None):
+def execute(participant_id, result_path, runner=None):
     try:
-        validate_participant_id(participant_id)
+        participant_id = validate_login_participant_id(participant_id)
         if runner is None:
             from .experiment import run_experiment
             runner = run_experiment
-        if dummy_mode is None:
-            summary, directory = runner(participant_id)
-        else:
-            config = replace(ExperimentConfig(), dummy_mode=dummy_mode)
-            summary, directory = runner(participant_id, config=config)
+        config = replace(ExperimentConfig(), dummy_mode=participant_id == "0")
+        summary, directory = runner(participant_id, config=config)
         metadata = json.loads((Path(directory) / "session.json").read_text(encoding="utf-8"))
         result = dict(status="completed", summary=summary, **session_details(metadata, directory))
         code = 0
@@ -55,12 +52,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--participant-id", required=True)
     parser.add_argument("--result-file", required=True)
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--dummy-mode", dest="dummy_mode", action="store_true")
-    mode.add_argument("--eyelink-mode", dest="dummy_mode", action="store_false")
-    parser.set_defaults(dummy_mode=None)
     args = parser.parse_args()
-    raise SystemExit(execute(args.participant_id, args.result_file, dummy_mode=args.dummy_mode))
+    raise SystemExit(execute(args.participant_id, args.result_file))
 
 
 if __name__ == "__main__":

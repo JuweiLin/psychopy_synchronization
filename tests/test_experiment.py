@@ -13,7 +13,7 @@ from psychopy_sync.articles import load_experiment_articles
 from psychopy_sync.condition1 import ExperimentAborted
 from psychopy_sync.config import ExperimentConfig, EyeLinkConfig
 from psychopy_sync.data_viewer import DataViewerExport
-from psychopy_sync.event_log import EventLog, SessionStore
+from psychopy_sync.event_log import EventLog, SessionStore, USER_FIELDS
 from psychopy_sync.experiment import run_experiment
 from psychopy_sync.eyelink import EyeLinkController
 from psychopy_sync.reading_speed import reading_summary
@@ -108,7 +108,7 @@ class ExperimentTests(unittest.TestCase):
         for article_id, title, count in (("A", "One", 10), ("B", "Two", 30), ("C", "Three", 2)):
             with (assets / "articles" / (article_id + ".csv")).open("w", newline="", encoding="utf-8-sig") as stream:
                 csv.writer(stream).writerows([[title], [" ".join(["word"] * count)]])
-        self.config = ExperimentConfig(assets_dir=assets, output_dir=self.root / "data", condition2_count=1,
+        self.config = ExperimentConfig(assets_dir=assets, output_dir=self.root / "data", condition1_count=2, condition2_count=1,
                                        random_seed=4, dummy_mode=False, tts_server_url=None)
         selected = load_experiment_articles(self.config)
         self.article_ids = {a.title: a.article_id for articles in selected.values() for a in articles}
@@ -123,6 +123,7 @@ class ExperimentTests(unittest.TestCase):
         psychopy = types.SimpleNamespace(logging=types.SimpleNamespace(
             defaultClock=types.SimpleNamespace(getTime=lambda: self.win.now)))
         for patcher in (patch.dict("sys.modules", {"psychopy": psychopy}),
+                        patch("psychopy_sync.experiment.load_assignment", return_value=None),
                         patch("psychopy_sync.experiment.create_window", return_value=self.win),
                         patch("psychopy_sync.experiment.EyeLinkController", return_value=self.controller),
                         patch("psychopy_sync.experiment.ReadingDisplay", FakeView),
@@ -355,7 +356,7 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(len(read_csv(self.config.output_dir / "users.csv")), 1)
         self.assertEqual(len(read_csv(self.config.output_dir / "reading_speed.csv")), 2)
         user = read_csv(self.config.output_dir / "users.csv")[0]
-        self.assertEqual(set(user), {"participant_id", "created_at_utc"})
+        self.assertEqual(set(user), set(USER_FIELDS))
         self.assertEqual(user["participant_id"], "S001")
         self.assertTrue(user["created_at_utc"])
 
@@ -372,7 +373,7 @@ class ExperimentTests(unittest.TestCase):
         users = read_csv(users_path)
         self.assertEqual([row["participant_id"] for row in users], ["S001", "S002"])
         self.assertEqual(users[0]["created_at_utc"], "2026-01-01T00:00:00+00:00")
-        self.assertTrue(all(set(row) == {"participant_id", "created_at_utc"} for row in users))
+        self.assertTrue(all(set(row) == set(USER_FIELDS) for row in users))
         self.assertNotIn("Legacy participant", users_path.read_text(encoding="utf-8-sig"))
 
     def test_pool_uses_filename_ids_without_catalog_and_rejects_path_escape(self):

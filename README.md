@@ -9,9 +9,9 @@ Double-click the entry for the experiment computer:
 - **Windows:** [Start Experiment.bat](Start%20Experiment.bat)
 - **macOS:** [Start Experiment.command](Start%20Experiment.command)
 
-Keep the whole project folder together when copying it to another computer. Enter a participant ID such as `S001`, then click **Start Experiment**. No name or password is collected. No terminal commands need to be typed; a terminal/console window opens only to launch the application.
+Keep the whole project folder together when copying it to another computer. Enter a whole-number participant ID from `0` to `200`, then click **Start Experiment**. Other inputs show an error. Leading zeros are removed, so `001` uses ID `1`. No name or password is collected. No terminal commands need to be typed; a terminal/console window opens only to launch the application.
 
-Select **Dummy mode (no EyeLink)** in the login window to skip calibration and eye tracking for that session, then click **Start Dummy Session**. Clear the checkbox for a real EyeLink session. The login opens in real EyeLink mode by default. The selection is passed to the experiment process; there is no dummy-mode setting in `config.py`. Mode changes recheck GPU readiness and apply the corresponding dependency checks. Configured TTS still uses the GPU service in either mode.
+Enter **0** for a dummy session or **1–200** for a real EyeLink session. There is no mode checkbox or config switch. ID 0 previews participant 1's article list without claiming a formal slot, skips calibration/eye tracking, and saves under `data/dummy/`. Changing between 0 and a formal ID rechecks GPU readiness and applies the corresponding dependency checks. Configured TTS still uses the GPU service in either mode.
 
 The launcher looks for a project `.venv` / `venv` and an installed PsychoPy application. Dummy mode requires PsychoPy and wxPython; configured Condition 2 playback also requires PsychoPy's PTB (`psychtoolbox`) and `soundfile` audio dependencies. Real recording also requires SR Research PyLink (`pylink`) and `EyeLinkCoreGraphicsPsychoPy`. Missing components are shown before the experiment starts. Windows discovery checks common PsychoPy installation folders under Program Files and Local AppData/Programs. If automatic launch fails, a file chooser lets you select `python.exe` inside the PsychoPy installation folder. This choice is saved under `data/launcher_logs/windows-python.txt` for future launches. If PsychoPy is not installed, install PsychoPy Standalone first. Opening the `.py` file directly depends on Windows file associations; use the `.bat` entry. The Windows chooser has not been tested on a Windows computer yet.
 
@@ -22,19 +22,19 @@ PsychoPy-managed packages are loaded in the runtime check, login and experiment 
 Edit only [config.py](config.py) in the project root before launching. It contains four settings:
 
 ```python
-condition1_count = 2
-condition2_count = 2
+condition1_count = 4
+condition2_count = 4
 eyelink_ip = "100.1.1.1"
 tts_server_url = "http://192.168.137.2:8765"
 ```
 
-With **Dummy mode (no EyeLink)** selected in the login window, the experiment skips the EyeLink connection, calibration, recording, package checks and EDF transfer. It keeps article selection, reading, flip timestamps, WPM, CSV logs and configured Condition 2 audio playback. Clear the checkbox for the real EyeLink setup. The login and ready screen identify dummy mode in English.
+With ID **0**, the experiment skips the EyeLink connection, calibration, recording, package checks and EDF transfer. It keeps reading, flip timestamps, WPM, CSV logs and configured Condition 2 audio playback. IDs **1–200** use the real EyeLink setup. The login and ready screen identify dummy mode in English.
 
-The two counts control how many articles are sampled for each condition. Set `eyelink_ip` to the tracker address for real recording. Leave `tts_server_url` empty until the GPU address is known, then fill in its origin, such as `"http://192.168.1.20:8765"`. Save the file and reopen the launcher after changes. Internal display defaults and validation remain in `psychopy_sync/config.py`.
+The imported frozen schedule requires both article counts to remain **4**; changing them requires a matching new schedule. Set `eyelink_ip` to the tracker address for real recording. Leave `tts_server_url` empty for a reading-only session, or fill in the GPU service origin. Save the file and reopen the launcher after changes. Internal display defaults and validation remain in `psychopy_sync/config.py`.
 
-Put one article in each `assets/articles/<article_id>.csv`. Each CSV has one column: the first cell is the title; each following nonempty cell is one sentence/page. Quote cells containing commas or line breaks. IDs use 1–32 ASCII letters, digits, underscores or hyphens. The article pool must contain at least the combined article count. The supplied four articles are sample text.
+The twelve study articles are in `assets/articles/<article_id>.csv` (`A02`, `A03`, `A05`, `A08`, `A09`, `A12`, `A15`, `A19`, `A20`, `A28`, `A29`, `A30`). Each CSV has one column: the title is the header and each following cell is one body Screen from the pilot workbook, preserving its hard line breaks. A Screen can contain several sentences; the program does not split it further. The title is excluded from reading/TTS. Questions and pilot feedback fields are not imported. `assets/stimulus_import.json` records source hashes, page-to-Screen mapping and word counts.
 
-Both conditions are sampled without replacement at startup. The seed, article order and stimulus snapshots are saved. Space starts each article. In Condition 1, Space advances a page and ends the last page. In Condition 2, each sentence plays its matching WAV and automatically advances when playback finishes. Escape stops the session.
+`assets/user_assignments.csv` freezes the 200 assignments from planning document version 4.0 (seed 20261013). ID 1 uses R001, ID 2 uses R002, and so on. Each row contains SYNC/FLEX, its list ID, and four article IDs in order for each condition. No new draw is made at login. Reusing an ID preserves its assigned list; a changed schedule for an already registered ID raises an error. Group membership is saved for analysis; the full group-specific instruction wording is not supplied yet, so both groups currently use the existing common reading/listening prompt. Space starts each article. In Condition 1, Space advances a page and ends the last page. In Condition 2, each page plays its matching WAV and automatically advances when playback finishes. Escape stops the session.
 
 After Space starts an article, a central white `+` appears on the same black background for a target of **1500 ms**, then switches directly to the first sentence. This happens once per article in both conditions; sentences within an article advance directly. The cross has a separate AOI and Data Viewer baseline trial (`phase=baseline`, `sentence_index=0`), linked to the article ID. Sentence trials use `phase=reading`. Actual baseline start/end flips, duration and status are saved in the corresponding condition CSV. Baseline time is excluded from reading speed. Display timing is quantized to refresh cycles; use the recorded timestamps to check actual durations.
 
@@ -54,7 +54,8 @@ The service loads the model and generates a short test WAV at startup. The login
 
 ## Data
 
-- `data/users.csv`: participant IDs and first registration times.
+- `assets/user_assignments.csv`: fixed assignments for IDs 1–200; not a completion log.
+- `data/users.csv`: registered IDs, first registration times, slots, instruction groups, list IDs and schedule provenance.
 - `data/reading_speed.csv`: reading speed for each participant/session.
 - `data/<participant_id>/<session_id>/`: `condition1.csv`, `condition2.csv`, `user_logs.csv`, `sentence_pages.csv`, `word_aois.csv`, `session.json`, `stimuli/`, `screenshots/`, `interest_areas/`, `aoi_previews/` and `eyelink.edf`.
 - `assets/TTS/<participant_id>/<session_id>/`: `tts_index.csv`, requests, manifest and sentence WAVs inside article folders.

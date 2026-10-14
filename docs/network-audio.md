@@ -132,7 +132,7 @@ For HTTP/file testing without a model:
 python start_gpu_server.py --demo
 ```
 
-This uses the host/port in `gpu_config.py` and skips reference files/model dependencies. The launcher accepts this server only with **Dummy mode (no EyeLink)** selected in the login window. An existing server must be restarted with the updated code to provide `/ready`.
+This uses the host/port in `gpu_config.py` and skips reference files/model dependencies. The launcher accepts this server only for participant ID **0** (dummy mode). An existing server must be restarted with the updated code to provide `/ready`.
 
 In another terminal, use a `requests.json` saved by a completed Condition 1 session. Replace the placeholder path below:
 

@@ -21,10 +21,12 @@ ARTICLE_FIELDS += ["audio_status", "audio_path", "audio_index_path", "audio_job_
 ARTICLE_FIELDS += ["baseline_trial_id", "baseline_screenshot_path", "baseline_ias_path", "baseline_status",
                    "baseline_target_s", "baseline_start_event_id", "baseline_end_event_id",
                    "baseline_start_timestamp_s", "baseline_end_timestamp_s"]
+ASSIGNMENT_FIELDS = ["allocation_slot", "instruction_group", "list_id", "schedule_version", "assignment_sha256"]
+ARTICLE_FIELDS += ASSIGNMENT_FIELDS
 LOG_FIELDS = ["participant_id", "session_id", "event_id", "event", "condition", "article_id",
               "page", "timestamp_s", "timestamp_source", "logged_at_utc", "message",
               "marker_status", "detail"]
-USER_FIELDS = ["participant_id", "created_at_utc"]
+USER_FIELDS = ["participant_id", "created_at_utc"] + ASSIGNMENT_FIELDS
 SPEED_FIELDS = ["participant_id", "session_id", "article_count", "total_units", "count_mode",
                 "total_reading_s", "speed_per_minute", "speed_unit", "timing_source"]
 SENTENCE_FIELDS = ["participant_id", "session_id", "condition", "article_id", "sentence_index",
@@ -65,10 +67,23 @@ def validate_participant_id(participant_id):
     return participant_id
 
 
+def validate_login_participant_id(participant_id):
+    """Validate numeric desktop IDs while retaining support for legacy records."""
+    if (not isinstance(participant_id, str) or not re.fullmatch(r"[0-9]{1,3}", participant_id)
+            or int(participant_id) > 200):
+        raise ValueError("Enter a whole-number participant ID from 0 to 200.")
+    return str(int(participant_id))
+
+
 class SessionStore:
-    def __init__(self, config, participant_id, articles, session_id=None):
+    def __init__(self, config, participant_id, articles, session_id=None, assignment=None):
         validate_participant_id(participant_id)
         self.participant_id = participant_id
+        assignment_fields = {name: "" for name in ASSIGNMENT_FIELDS}
+        if assignment is not None:
+            assignment_fields.update({name: getattr(assignment, name) for name in ASSIGNMENT_FIELDS
+                                      if name != "assignment_sha256"})
+            assignment_fields["assignment_sha256"] = assignment.source_sha256
         self.session_id = session_id or (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "_" + uuid.uuid4().hex[:8])
         if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", self.session_id):
             raise ValueError("Invalid session ID")
@@ -81,15 +96,23 @@ class SessionStore:
         if users_path.exists():
             with users_path.open(encoding="utf-8-sig", newline="") as stream:
                 reader = csv.DictReader(stream)
-                if not set(USER_FIELDS).issubset(reader.fieldnames or []):
+                if not {"participant_id", "created_at_utc"}.issubset(reader.fieldnames or []):
                     raise ValueError("User registry is missing required fields")
                 migrate_users = reader.fieldnames != USER_FIELDS
                 # Remove legacy name columns while retaining IDs and registration dates.
-                users = [{field: row[field] for field in USER_FIELDS} for row in reader]
+                users = [{field: row.get(field, "") for field in USER_FIELDS} for row in reader]
+        existing = next((row for row in users if row["participant_id"] == participant_id), None)
+        if existing is not None and assignment is not None:
+            for name, value in assignment_fields.items():
+                if existing[name] and existing[name] != value:
+                    raise ValueError(f"The frozen assignment changed for participant {participant_id}: {name}")
+            if any(existing[name] != value for name, value in assignment_fields.items()):
+                existing.update(assignment_fields)
+                migrate_users = True
         self.directory = self.root / participant_id / self.session_id
         self.directory.mkdir(parents=True, exist_ok=False)
-        if not any(row["participant_id"] == participant_id for row in users):
-            users.append(dict(participant_id=participant_id, created_at_utc=utc_now()))
+        if existing is None:
+            users.append(dict(participant_id=participant_id, created_at_utc=utc_now(), **assignment_fields))
             migrate_users = True
         if migrate_users:
             write_csv(users_path, USER_FIELDS, users)
@@ -111,12 +134,16 @@ class SessionStore:
                 baseline_status="not_presented", baseline_target_s=config.article_baseline_s,
                 baseline_start_event_id="", baseline_end_event_id="",
                 baseline_start_timestamp_s="", baseline_end_timestamp_s="",
+                **assignment_fields,
             ) for index, a in enumerate(selected, 1)]
         self.metadata = dict(participant_id=participant_id, session_id=self.session_id,
                              created_at_utc=utc_now(), status="initialized", config=asdict(config),
                              dummy_mode=config.dummy_mode,
                              host_edf_name="" if config.dummy_mode else uuid.uuid4().hex[:8].upper() + ".EDF",
                              edf_status="disabled_dummy" if config.dummy_mode else "not_opened")
+        self.metadata["assignment"] = assignment.metadata() if assignment is not None else None
+        self.metadata["selection_method"] = ("dummy_schedule_preview" if assignment.preview_of else "frozen_schedule") \
+            if assignment is not None else "random_pool"
         self.metadata.update(edf_path="", edf_bytes=0,
                              edf_expected_path=str((self.directory / "eyelink.edf").resolve()),
                              dataviewer_trial_unit="article_baseline_and_sentence", screenshots_status="pending",

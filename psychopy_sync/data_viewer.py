@@ -130,6 +130,13 @@ class DataViewerExport:
         return log.emit(event, row["condition"], row["article_id"], page=row.get("sentence_index", ""),
                         timestamp=timestamp, marker=message)
 
+    def _assignment_variables(self, log, row, timestamp):
+        assignment = self.store.metadata.get("assignment")
+        if assignment is not None:
+            for name in ("participant_id", "instruction_group", "allocation_slot", "list_id"):
+                value = assignment[name] or "none"
+                self._message(log, row, "DV_TRIAL_VAR", f"!V TRIAL_VAR {name} {value}", timestamp)
+
     def start_page(self, log, condition, article_id, index, timestamp):
         self.end_baseline(log, timestamp)
         self.end_page(log, timestamp)
@@ -143,6 +150,7 @@ class DataViewerExport:
         self._message(log, row, "DV_TRIAL_START", f"TRIALID {row['trial_id']}", timestamp)
         for name in ("condition", "article_id", "sentence_index"):
             self._message(log, row, "DV_TRIAL_VAR", f"!V TRIAL_VAR {name} {row[name]}", timestamp)
+        self._assignment_variables(log, row, timestamp)
         self._message(log, row, "DV_TRIAL_VAR", "!V TRIAL_VAR phase reading", timestamp)
         self._message(log, row, "DV_IMAGE", f"!V IMGLOAD FILL {row['screenshot_path']}", timestamp)
         self._message(log, row, "DV_WORD_AOI", f"!V IAREA FILE {row['ias_path']}", timestamp)
@@ -181,6 +189,7 @@ class DataViewerExport:
         self._message(log, row, "DV_BASELINE_TRIAL_START", f"TRIALID {row['baseline_trial_id']}", timestamp)
         for name in ("condition", "article_id"):
             self._message(log, row, "DV_TRIAL_VAR", f"!V TRIAL_VAR {name} {row[name]}", timestamp)
+        self._assignment_variables(log, row, timestamp)
         self._message(log, row, "DV_TRIAL_VAR", "!V TRIAL_VAR sentence_index 0", timestamp)
         self._message(log, row, "DV_TRIAL_VAR", "!V TRIAL_VAR phase baseline", timestamp)
         self._message(log, row, "DV_IMAGE", f"!V IMGLOAD FILL {row['baseline_screenshot_path']}", timestamp)

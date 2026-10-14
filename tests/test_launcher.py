@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 from psychopy_sync.condition1 import ExperimentAborted
 from psychopy_sync.config import ExperimentConfig
 from psychopy_sync.desktop_runner import execute
-from psychopy_sync.event_log import validate_participant_id
+from psychopy_sync.event_log import validate_login_participant_id, validate_participant_id
 from psychopy_sync.launcher import experiment_command, result_message
 from psychopy_sync.launcher_bootstrap import Runtime, find_runtime, main, required_modules, windows_python_candidates
 
@@ -22,13 +22,16 @@ class LauncherTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.result_path = self.root / "result.json"
 
-    def test_login_accepts_only_safe_participant_ids_and_builds_argument_list(self):
+    def test_login_accepts_numeric_ids_from_zero_to_200_and_builds_argument_list(self):
         self.assertEqual(validate_participant_id("S001-a_b"), "S001-a_b")
-        command = experiment_command("S001", self.result_path)
-        self.assertEqual(command[1:5], ["-m", "psychopy_sync.desktop_runner", "--participant-id", "S001"])
+        self.assertEqual(validate_login_participant_id("0"), "0")
+        self.assertEqual(validate_login_participant_id("200"), "200")
+        command = experiment_command("001", self.result_path)
+        self.assertEqual(command[1:5], ["-m", "psychopy_sync.desktop_runner", "--participant-id", "1"])
         self.assertEqual(command[5:], ["--result-file", str(self.result_path)])
         self.assertNotIn("--name", command)
-        for participant_id in ("", " ", "../S001", "user name", "用户", "A" * 33, None):
+        for participant_id in ("", " ", "../S001", "S001", "user name", "用户", "A" * 33,
+                               "-1", "201", "1000", "1.5", "1e2", "+1", "１", None):
             with self.subTest(participant_id=participant_id), self.assertRaises(ValueError):
                 experiment_command(participant_id, self.result_path)
 
@@ -38,8 +41,9 @@ class LauncherTests(unittest.TestCase):
         (directory / "session.json").write_text(json.dumps({"tts_status": "not_configured"}))
         summary = {"speed_per_minute": 240, "speed_unit": "words/min"}
         runner = Mock(return_value=(summary, directory))
-        self.assertEqual(execute("S001", self.result_path, runner), 0)
-        runner.assert_called_once_with("S001")
+        self.assertEqual(execute("001", self.result_path, runner), 0)
+        self.assertEqual(runner.call_args.args, ("1",))
+        self.assertFalse(runner.call_args.kwargs["config"].dummy_mode)
         result = json.loads(self.result_path.read_text())
         title, message = result_message(result)
         self.assertEqual(title, "Session complete")
@@ -50,7 +54,7 @@ class LauncherTests(unittest.TestCase):
 
     def test_escape_returns_an_aborted_outcome(self):
         runner = Mock(side_effect=ExperimentAborted("Escape pressed"))
-        self.assertEqual(execute("S001", self.result_path, runner), 130)
+        self.assertEqual(execute("1", self.result_path, runner), 130)
         result = json.loads(self.result_path.read_text())
         self.assertEqual(result_message(result)[0], "Session stopped")
 
@@ -65,7 +69,7 @@ class LauncherTests(unittest.TestCase):
     def test_abort_retains_edf_recovery_name_and_directory_in_results(self):
         error = ExperimentAborted("Escape pressed")
         error.session_result = dict(directory="data/S001/run", edf_status="recovery_required", host_edf_name="ABC123.EDF")
-        self.assertEqual(execute("S001", self.result_path, Mock(side_effect=error)), 130)
+        self.assertEqual(execute("1", self.result_path, Mock(side_effect=error)), 130)
         result = json.loads(self.result_path.read_text())
         title, message = result_message(result)
         self.assertEqual(title, "Session stopped")
@@ -75,7 +79,7 @@ class LauncherTests(unittest.TestCase):
     def test_failure_returns_an_error_instead_of_success(self):
         runner = Mock(side_effect=ConnectionError("EyeLink unavailable"))
         with patch("psychopy_sync.desktop_runner.traceback.print_exc"):
-            self.assertEqual(execute("S001", self.result_path, runner), 1)
+            self.assertEqual(execute("1", self.result_path, runner), 1)
         result = json.loads(self.result_path.read_text())
         self.assertEqual(result_message(result), ("Session failed", "EyeLink unavailable"))
 

@@ -9,13 +9,15 @@ The experiment measures Condition 1 reading speed, then presents Condition 2 sen
 | `psychopy_sync/launcher_bootstrap.py` | Finds the PsychoPy/wx environment, including common Windows and macOS standalone installations |
 | `psychopy_sync/package_paths.py`, `psychopy_sync/__init__.py` | Expose PsychoPy-managed packages for the active Python version in each launch/experiment process without importing hardware libraries |
 | `psychopy_sync/windows_python_picker.ps1` | Windows fallback file chooser and saved interpreter path |
-| `psychopy_sync/launcher.py` | English ID form with per-session Dummy mode switch, asynchronous GPU checks, dependency checks and results |
+| `psychopy_sync/launcher.py` | English numeric ID form; ID 0 selects dummy mode; asynchronous GPU checks, dependency checks and results |
 | `psychopy_sync/server_check.py` | Bounded readiness requests, protocol/mode checks and readable connection failures |
 | `psychopy_sync/desktop_runner.py` | Runs the experiment in a separate process and returns its outcome to the form |
 | `config.py` | Four editable settings: condition counts, tracker IP and GPU URL |
 | `psychopy_sync/config.py` | Loads root settings; keeps internal defaults and validation |
 | `psychopy_sync/experiment.py` | Calibration → continuous recording → Condition 1 → speed → background TTS → Condition 2 playback → cleanup |
-| `psychopy_sync/articles.py` | Loads article CSVs, preserves pages, counts words and samples disjoint conditions |
+| `psychopy_sync/assignments.py`, `assets/user_assignments.csv` | Frozen mapping from IDs 1–200 to SYNC/FLEX and ordered article lists; ID 0 previews R001 |
+| `psychopy_sync/articles.py` | Loads article CSVs, preserves pages, counts words and follows the frozen article order |
+| `scripts/import_study_materials.py`, `assets/stimulus_import.json` | Imports body Screens and the frozen schedule from XLSX/DOCX, recording provenance and excluding questions |
 | `psychopy_sync/reading_display.py` | Prepares pages, shows one 1500 ms cross per article, handles keys, binds events to flips and schedules PTB sentence playback |
 | `psychopy_sync/word_layout.py` | Measures and positions word TextStim objects; produces matching word AOI rectangles and IAS text |
 | `psychopy_sync/condition1.py` | Runs articles, pairs onset/end events and saves complete reading speed |

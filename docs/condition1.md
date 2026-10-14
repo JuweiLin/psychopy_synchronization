@@ -2,23 +2,23 @@
 
 ## Before a session
 
-1. Install PsychoPy and wxPython. For real recording (the login's Dummy mode checkbox cleared), also install SR Research PyLink (`pylink`) and `EyeLinkCoreGraphicsPsychoPy`.
+1. Install PsychoPy and wxPython. For real recording (participant IDs 1–200), also install SR Research PyLink (`pylink`) and `EyeLinkCoreGraphicsPsychoPy`.
 2. For real recording, connect the EyeLink Host and verify `eyelink_ip` in the root `config.py` (currently `100.1.1.1`).
 3. The display defaults to screen 0, fullscreen and 1920 × 1080. The formal experiment measures refresh rate; it does not use the calibration check's assumed 60 Hz. Advanced display defaults remain in `psychopy_sync/config.py`.
-4. Set `condition1_count` and `condition2_count` in the root `config.py`. Confirm that `assets/articles/` contains enough article CSVs.
+4. Keep `condition1_count = 4` and `condition2_count = 4` for the frozen schedule. Confirm that `assets/articles/` contains all twelve study CSVs and `assets/user_assignments.csv` is present.
 5. Leave `tts_server_url=""` for a recording-only test, or set the GPU service origin for audio generation. Save changes and reopen the launcher.
 
 Double-click `Start Experiment.bat` on Windows or `Start Experiment.command` on macOS, enter a participant ID and click **Start Experiment**. The terminal window is a launch helper; no command input is required. The login and experiment prompts are in English. The launcher checks only the modules required by the configured mode before starting; real tracker connectivity is checked by the experiment process. When a GPU URL is configured, the login checks `/ready` in the background and again before each session. Loading is retried automatically. An offline, incompatible or failed server prevents starting; **Recheck** retries after a correction. The empty-URL reading-only workflow remains available.
 
 ## Dummy mode
 
-Select **Dummy mode (no EyeLink)** in the login window, then click **Start Dummy Session**. There is no dummy-mode setting in the root config; the login defaults to real EyeLink mode. The selected mode is passed explicitly to the experiment process. Dummy-mode session preflight does not require or probe `pylink` or `EyeLinkCoreGraphicsPsychoPy`, does not connect to a tracker, and skips calibration and all recording/EDF operations. It shows a dummy ready screen before Condition 1. PsychoPy and wxPython are still required for the display and login.
+Enter **0** in the login window, then click **Start Dummy Session**. There is no mode checkbox or dummy-mode setting in the root config. The launcher and experiment process derive the mode from the participant ID. ID 0 previews R001's articles under a separate dummy identity, without claiming R001. Dummy-mode session preflight does not require or probe `pylink` or `EyeLinkCoreGraphicsPsychoPy`, does not connect to a tracker, and skips calibration and all recording/EDF operations. It shows a dummy ready screen before Condition 1. PsychoPy and wxPython are still required for the display and login.
 
 Article selection, sentence pages, keyboard controls, flip timestamps, WPM calculation, event logs and configured Condition 2 playback run normally. Condition 2 requires PsychoPy's PTB and soundfile dependencies even in dummy mode. `tts_server_url` still controls whether audio is generated; dummy mode does not disable the GPU service. A demo-silence server can pass the readiness check only in dummy mode; real EyeLink sessions require a verified F5-TTS server when a URL is configured.
 
 Dummy session files and global tables are stored under `data/dummy/`. Session metadata records `dummy_mode=true`, `edf_status=disabled_dummy`, an empty Host EDF filename and no EyeLink configuration. Local events use `marker_status=disabled_dummy`, not `sent`. No synthetic eye data or EDF is created. The TTS manifest also records the mode.
 
-Clear **Dummy mode (no EyeLink)** before real device testing. The remaining recording sequence and EDF recovery details below describe real mode.
+Use an ID from **1–200** for real device testing. The remaining recording sequence and EDF recovery details below describe real mode.
 
 ## Articles and selection
 
@@ -26,7 +26,9 @@ Each `assets/articles/<article_id>.csv` has one column. Its first cell is the ti
 
 Article IDs are filename stems: 1–32 ASCII letters, digits, `_` or `-`. Case-insensitive duplicate IDs are rejected; duplicate titles are allowed. The title does not count toward reading word count and is not displayed as body text.
 
-At startup, the code randomly selects `condition1_count + condition2_count` distinct articles, then assigns the first group to Condition 1 and the remainder to Condition 2. Order is randomized within this selection. The internal default `random_seed=None` creates a new seed; the actual seed, pool IDs and selected order are saved. A fixed integer supplied programmatically reproduces selection for the same file pool and implementation. This does not implement cross-participant counterbalancing.
+Formal IDs map directly to the frozen rows of `assets/user_assignments.csv`: 1 → R001 through 200 → R200. Every row contains an instruction group (SYNC/FLEX), list ID and four ordered article IDs for each condition. The program loads that order without another random draw. Each participant has eight different articles and two low/two high readability articles per condition. ID 0 uses the first row as a dummy preview. Group-specific instruction text is pending; both groups currently use the common prompt and the same playback behavior.
+
+`assets/articles/` contains the twelve articles extracted from the pilot workbook. The original body Screen boundaries and hard line breaks are preserved; a page is not necessarily a single sentence. The title Screen becomes the CSV header, and pilot questions/feedback fields are excluded. `assets/stimulus_import.json` records the source checksums and Screen-to-page mapping. The study still estimates speed from Condition 1; this import does not add the planning document's separate pre-block VO speed calibration.
 
 ## Session sequence
 
@@ -69,7 +71,7 @@ Eye samples, including gaze and pupil area, are stored in EDF. `user_logs.csv` c
 
 ## Output and identity
 
-Only participant ID is collected. `users.csv` contains `participant_id` and `created_at_utc`. Loading an older registry removes its legacy name column while preserving IDs and registration times. Reusing an ID creates a new session and keeps earlier sessions.
+Only participant ID is collected. The desktop login accepts whole numbers from `0` to `200`, inclusive, and shows an English error for other inputs. Leading zeros are removed (`001` becomes `1`). `users.csv` contains `participant_id`, `created_at_utc`, `allocation_slot`, `instruction_group`, `list_id`, `schedule_version` and `assignment_sha256`. Older registries gain these columns while retaining IDs and dates and dropping legacy names. Reusing an ID creates a new session with the same frozen assignment and keeps earlier sessions; changing an already bound schedule raises an error. Numeric login validation does not rename or delete existing sessions with older ID formats. Assigned slots and completed article/session statuses are separate records.
 
 | Output | Contents |
 | --- | --- |
@@ -108,6 +110,6 @@ Escape or an exception triggers cleanup and data saving, with an attempted EDF d
 
 EDF transfer first writes `.partial.edf`, retries up to three times, and publishes `eyelink.edf` only after the received byte count matches a nonempty local file. Transfer failure records `edf_status=recovery_required` and the Host EDF filename for manual recovery; the login also displays the recovery name. Forced termination or power loss can lose locally buffered events; inspect the Host recording for recovery.
 
-Data Viewer trials are per sentence, with relative screenshot paths sent via `!V IMGLOAD FILL`. This does not interrupt continuous recording or change article-level WPM. `sentence_pages.csv` indexes the images and visible intervals. AOIs are created later in Data Viewer; see [EDF and sentence images](data-viewer.md).
+Data Viewer trials are per article baseline and body page, with relative screenshot paths sent via `!V IMGLOAD FILL`. Participant ID, instruction group, allocation slot and list ID are included as trial variables. This does not interrupt continuous recording or change article-level WPM. `sentence_pages.csv` retains its existing filename/index fields for the supplied pages. Word AOIs and the cross AOI are exported automatically; see [EDF and sentence images](data-viewer.md).
 
 One experiment process should own an output directory. Global CSV tables do not support concurrent writers. Hardware and real model behavior still need testing on the experiment computers.
